@@ -12,15 +12,19 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
       setFade(true);
       setTimeout(() => {
         if (onFinish) onFinish();
-      }, 400);
-    }, 1200);
+      }, 350);
+    }, 1000);
 
     return () => clearTimeout(timer);
-  }, [onFinish]);
+  }, []);
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-white transition-opacity duration-400 ${
+      onClick={() => {
+        setFade(true);
+        if (onFinish) onFinish();
+      }}
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-white transition-opacity duration-300 cursor-pointer ${
         fade ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
