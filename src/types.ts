@@ -10,6 +10,7 @@ export interface RoleInfo {
 export interface QuotationItem {
   id: string;
   productId?: string;
+  codigo?: string;
   cantidad: number;
   unidadMedida: string; // e.g. H87, PZA, CAJA
   descripcion: string;

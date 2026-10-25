@@ -146,6 +146,7 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
     const newItem: QuotationItem = {
       id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       productId: prod.id,
+      codigo: prod.codigo,
       cantidad: qty,
       unidadMedida: prod.unidadMedida || 'H87',
       descripcion: prod.descripcion,
@@ -169,6 +170,7 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
 
     const newItem: QuotationItem = {
       id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      codigo: '',
       cantidad: 1,
       unidadMedida: 'H87',
       descripcion: '',
@@ -176,6 +178,54 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
       importe: 0,
     };
     setItems((prev) => [...prev, newItem]);
+  };
+
+  // Handle selecting a product from Description dropdown in row
+  const handleSelectProductInRow = (itemId: string, prodId: string) => {
+    if (!prodId) return;
+    const prod = products.find((p) => p.id === prodId);
+    if (!prod) return;
+
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        const qty = item.cantidad || 1;
+        const price = prod.precioUnitario || 0;
+        return {
+          ...item,
+          productId: prod.id,
+          codigo: prod.codigo,
+          descripcion: prod.descripcion,
+          unidadMedida: prod.unidadMedida || 'H87',
+          precioUnitario: price,
+          importe: Math.round(qty * price * 100) / 100,
+        };
+      })
+    );
+  };
+
+  // Handle selecting a code from Code dropdown in row
+  const handleSelectCodeInRow = (itemId: string, code: string) => {
+    if (!code) return;
+    const prod = products.find((p) => p.codigo === code);
+    if (!prod) return;
+
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        const qty = item.cantidad || 1;
+        const price = prod.precioUnitario || 0;
+        return {
+          ...item,
+          productId: prod.id,
+          codigo: prod.codigo,
+          descripcion: prod.descripcion,
+          unidadMedida: prod.unidadMedida || 'H87',
+          precioUnitario: price,
+          importe: Math.round(qty * price * 100) / 100,
+        };
+      })
+    );
   };
 
   // Update item field in table
@@ -584,10 +634,10 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
                   min="0.01"
                   step="any"
                   value={addItemQty}
-                  onChange={(e) => setAddItemQty(parseFloat(e.target.value) || 1)}
+                  onChange={(e) => setAddItemQty(parseFloat(e.target.value) || 0)}
                   placeholder="Cant."
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs sm:text-sm text-gray-900 font-mono text-center focus:outline-none focus:ring-2 focus:ring-[#66C34E]"
-                  title="Cantidad a agregar"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs sm:text-sm text-gray-900 font-mono text-center focus:outline-none focus:ring-2 focus:ring-[#66C34E] no-spin [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-bold"
+                  title="Cantidad a agregar (manual)"
                 />
               </div>
 
@@ -675,12 +725,12 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
                   <tr className="bg-[#C3CAD0] text-gray-900 font-bold uppercase text-[11px]">
-                    <th className="py-2 px-2 text-right w-20">Cant.</th>
-                    <th className="py-2 px-2 text-center w-24">Unid. Medida</th>
-                    <th className="py-2 px-3">Descripción del Producto</th>
-                    <th className="py-2 px-2 text-right w-28">Pcio. Unitario</th>
-                    <th className="py-2 px-3 text-right w-28">Importe</th>
-                    <th className="py-2 px-2 text-center w-12"></th>
+                    <th className="py-2.5 px-2 text-right w-20">Cant.</th>
+                    <th className="py-2.5 px-2 text-center w-28">Código</th>
+                    <th className="py-2.5 px-3">Descripción del Producto</th>
+                    <th className="py-2.5 px-2 text-right w-28">Pcio. Unitario</th>
+                    <th className="py-2.5 px-3 text-right w-28">Importe</th>
+                    <th className="py-2.5 px-2 text-center w-12"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
@@ -693,66 +743,98 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
                   ) : (
                     items.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-gray-50/80">
-                        {/* Cantidad */}
-                        <td className="py-2 px-2">
+                        {/* Cantidad - Sin flechitas, entrada manual limpia */}
+                        <td className="py-2 px-2 align-top">
                           <input
                             type="number"
-                            min="0.01"
                             step="any"
-                            value={item.cantidad}
-                            onChange={(e) =>
-                              handleUpdateItem(item.id, 'cantidad', parseFloat(e.target.value) || 0)
-                            }
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-right font-mono text-xs focus:ring-1 focus:ring-[#66C34E]"
+                            value={item.cantidad === 0 ? '' : item.cantidad}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                              handleUpdateItem(item.id, 'cantidad', val);
+                            }}
+                            placeholder="0"
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-right font-mono text-xs focus:ring-1 focus:ring-[#66C34E] no-spin [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-white font-bold"
+                            title="Ingrese cantidad manualmente"
                           />
                         </td>
 
-                        {/* Unidad de Medida */}
-                        <td className="py-2 px-2">
-                          <input
-                            type="text"
-                            value={item.unidadMedida}
-                            onChange={(e) =>
-                              handleUpdateItem(item.id, 'unidadMedida', e.target.value.toUpperCase())
+                        {/* Código - Desplegable con los códigos de productos */}
+                        <td className="py-2 px-2 align-top">
+                          <select
+                            value={
+                              item.codigo ||
+                              (products.find((p) => p.id === item.productId)?.codigo || '')
                             }
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-center font-mono text-xs uppercase focus:ring-1 focus:ring-[#66C34E]"
-                            placeholder="H87"
-                          />
+                            onChange={(e) => handleSelectCodeInRow(item.id, e.target.value)}
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-center font-mono text-xs font-bold uppercase focus:ring-1 focus:ring-[#66C34E] bg-white cursor-pointer"
+                            title="Seleccionar código de producto"
+                          >
+                            <option value="">-- Código --</option>
+                            {products.map((p) => (
+                              <option key={`code-${item.id}-${p.id}`} value={p.codigo}>
+                                {p.codigo}
+                              </option>
+                            ))}
+                          </select>
                         </td>
 
-                        {/* Descripción */}
-                        <td className="py-2 px-3">
-                          <input
-                            type="text"
-                            value={item.descripcion}
-                            onChange={(e) =>
-                              handleUpdateItem(item.id, 'descripcion', e.target.value)
-                            }
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs uppercase text-gray-900 focus:ring-1 focus:ring-[#66C34E]"
-                            placeholder="Descripción del producto..."
-                          />
+                        {/* Descripción del Producto - Desplegable para buscar fácilmente */}
+                        <td className="py-2 px-3 align-top">
+                          <div className="flex flex-col gap-1.5">
+                            <select
+                              value={
+                                item.productId ||
+                                (products.find(
+                                  (p) =>
+                                    p.codigo === item.codigo ||
+                                    p.descripcion.toUpperCase() === item.descripcion.toUpperCase()
+                                )?.id || '')
+                              }
+                              onChange={(e) => handleSelectProductInRow(item.id, e.target.value)}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-xs font-semibold uppercase text-gray-900 focus:ring-1 focus:ring-[#66C34E] bg-white cursor-pointer truncate"
+                              title="Desplegar y buscar producto registrado"
+                            >
+                              <option value="">
+                                -- Desplegar y buscar producto ({products.length} disponibles) --
+                              </option>
+                              {products.map((p) => (
+                                <option key={`desc-${item.id}-${p.id}`} value={p.id}>
+                                  [{p.codigo}] {p.descripcion}
+                                </option>
+                              ))}
+                            </select>
+
+                            <input
+                              type="text"
+                              value={item.descripcion}
+                              onChange={(e) =>
+                                handleUpdateItem(item.id, 'descripcion', e.target.value)
+                              }
+                              placeholder="O edite descripción personalizada..."
+                              className="w-full px-2 py-1 border border-dashed border-gray-200 hover:border-gray-300 rounded text-[11px] text-gray-700 uppercase focus:ring-1 focus:ring-[#66C34E] bg-gray-50/50"
+                            />
+                          </div>
                         </td>
 
-                        {/* Precio Unitario */}
-                        <td className="py-2 px-2">
+                        {/* Precio Unitario - Sin flechitas */}
+                        <td className="py-2 px-2 align-top">
                           <input
                             type="number"
                             min="0"
                             step="0.01"
-                            value={item.precioUnitario}
-                            onChange={(e) =>
-                              handleUpdateItem(
-                                item.id,
-                                'precioUnitario',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-right font-mono text-xs focus:ring-1 focus:ring-[#66C34E]"
+                            value={item.precioUnitario === 0 ? '' : item.precioUnitario}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                              handleUpdateItem(item.id, 'precioUnitario', val);
+                            }}
+                            placeholder="0.00"
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-right font-mono text-xs focus:ring-1 focus:ring-[#66C34E] no-spin [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-white font-bold"
                           />
                         </td>
 
                         {/* Importe calculado */}
-                        <td className="py-2 px-3 text-right font-mono font-bold text-gray-900">
+                        <td className="py-2 px-3 text-right font-mono font-bold text-gray-900 align-top pt-3">
                           $
                           {item.importe.toLocaleString('es-MX', {
                             minimumFractionDigits: 2,
@@ -760,12 +842,12 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
                           })}
                         </td>
 
-                        {/* Delete action */}
-                        <td className="py-2 px-2 text-center">
+                        {/* Acciones */}
+                        <td className="py-2 px-2 text-center align-top pt-2.5">
                           <button
                             type="button"
                             onClick={() => handleDeleteItem(item.id)}
-                            className="p-1 text-gray-400 hover:text-red-600 rounded transition"
+                            className="p-1 text-gray-400 hover:text-red-600 rounded transition cursor-pointer"
                             title="Eliminar partida"
                           >
                             <Trash2 className="w-4 h-4" />
