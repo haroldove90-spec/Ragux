@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "ROGUX - Sistema de Cotizaciones",
+  "short_name": "ROGUX",
+  "description": "Sistema integral de cotizaciones comerciales, catálogo de productos y clientes.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#66C34E",
+  "icons": [
+    {
+      "src": "https://appdesignproyectos.com/raguxicono.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://appdesignproyectos.com/raguxicono.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
