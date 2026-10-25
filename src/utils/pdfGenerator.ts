@@ -33,6 +33,8 @@ async function loadImageAsBase64(url: string): Promise<string | null> {
   });
 }
 
+export const MAX_LETTER_ITEMS = 30;
+
 export async function generateQuotationPDF(
   quotation: Quotation,
   profile: CompanyProfile
@@ -182,6 +184,18 @@ export async function generateQuotationPDF(
     formatCurrency(item.importe),
   ]);
 
+  // Validate single Letter page constraint
+  if (quotation.items.length > MAX_LETTER_ITEMS) {
+    throw new Error(
+      `La cotización excede la capacidad de 1 página tamaño carta (${quotation.items.length}/${MAX_LETTER_ITEMS} partidas). Debe generar una nueva cotización para evitar que salga en 2 páginas.`
+    );
+  }
+
+  // Optimize row heights and padding according to item count to ensure 100% 1-page fit
+  const itemCount = quotation.items.length;
+  const tableFontSize = itemCount > 22 ? 6.2 : 6.8;
+  const tableCellPadding = itemCount > 22 ? 0.75 : 1.1;
+
   autoTable(doc, {
     startY: tableStartY,
     margin: { left: marginX, right: marginX },
@@ -192,15 +206,15 @@ export async function generateQuotationPDF(
       fillColor: [195, 202, 207],
       textColor: [20, 20, 20],
       fontStyle: 'bold',
-      fontSize: 7.5,
+      fontSize: 7.2,
       halign: 'center',
-      cellPadding: 1.5,
+      cellPadding: 1.2,
       lineWidth: 0.2,
       lineColor: [255, 255, 255],
     },
     styles: {
-      fontSize: 6.8,
-      cellPadding: 1.2,
+      fontSize: tableFontSize,
+      cellPadding: tableCellPadding,
       textColor: [10, 10, 10],
       font: 'helvetica',
       overflow: 'linebreak',
@@ -213,7 +227,7 @@ export async function generateQuotationPDF(
       4: { cellWidth: 24, halign: 'right' },
     },
     didDrawCell: (data) => {
-      // Add very subtle horizontal dotted/solid line on row bottoms
+      // Add subtle horizontal line on row bottoms
       if (data.section === 'body') {
         doc.setDrawColor(240, 240, 240);
         doc.setLineWidth(0.1);
@@ -229,12 +243,11 @@ export async function generateQuotationPDF(
 
   // Calculate final Y after table
   const lastAutoTable = (doc as any).lastAutoTable;
-  let finalY = lastAutoTable ? lastAutoTable.finalY + 4 : 200;
+  let finalY = lastAutoTable ? lastAutoTable.finalY + 3 : 190;
 
-  // Check if we need to add a page or stay within bounds
-  if (finalY > pageHeight - 55) {
-    doc.addPage();
-    finalY = 15;
+  // Never add a second page. Strict single-page letter guarantee:
+  if (finalY > pageHeight - 50) {
+    finalY = pageHeight - 50;
   }
 
   // --- TOTALS AND LETRA SECTION ---

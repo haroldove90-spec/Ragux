@@ -61,13 +61,20 @@ export const QuotationsList: React.FC<QuotationsListProps> = ({
 
   // Export PDF directly
   const handleExportPDF = async (q: Quotation) => {
+    if (q.items.length > 30) {
+      window.alert(
+        `Aviso al Administrador: La cotización #${q.folio} tiene ${q.items.length} partidas y excede la capacidad de 1 página tamaño carta (máximo 30 partidas). Debe llenar otra cotización nueva para que no salgan cotizaciones en 2 páginas.`
+      );
+      return;
+    }
+
     try {
       setExportingId(q.id);
       const doc = await generateQuotationPDF(q, profile);
       doc.save(`Cotizacion_${q.folio}_${q.clienteNombre.slice(0, 15).trim()}.pdf`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error generating PDF:', err);
-      window.alert('No se pudo generar el archivo PDF.');
+      window.alert(err?.message || 'No se pudo generar el archivo PDF.');
     } finally {
       setExportingId(null);
     }

@@ -9,12 +9,14 @@ import {
   PackagePlus,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   Search,
+  FileText,
 } from 'lucide-react';
 import { Client, CompanyProfile, Product, Quotation, QuotationItem } from '../types';
 import { StorageService } from '../services/storage';
 import { numeroALetras } from '../utils/numberToWords';
-import { generateQuotationPDF } from '../utils/pdfGenerator';
+import { generateQuotationPDF, MAX_LETTER_ITEMS } from '../utils/pdfGenerator';
 import { QuotationDetailModal } from './QuotationDetailModal';
 
 interface QuotationFormProps {
@@ -77,6 +79,8 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isExporting, setIsExporting] = useState(false);
+  const [showPageLimitModal, setShowPageLimitModal] = useState(false);
+  const [pendingProductToAdd, setPendingProductToAdd] = useState<Product | null>(null);
 
   // Initialize or reset form
   useEffect(() => {
@@ -128,6 +132,13 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
     const prod = products.find((p) => p.id === selectedProductId);
     if (!prod) return;
 
+    // Check letter page capacity limit
+    if (items.length >= MAX_LETTER_ITEMS) {
+      setPendingProductToAdd(prod);
+      setShowPageLimitModal(true);
+      return;
+    }
+
     const qty = Math.max(1, addItemQty || 1);
     const unitPrice = prod.precioUnitario || 0;
     const totalItem = Math.round(qty * unitPrice * 100) / 100;
@@ -150,6 +161,12 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
 
   // Add empty manual item row
   const handleAddBlankItem = () => {
+    // Check letter page capacity limit
+    if (items.length >= MAX_LETTER_ITEMS) {
+      setShowPageLimitModal(true);
+      return;
+    }
+
     const newItem: QuotationItem = {
       id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       cantidad: 1,
@@ -227,6 +244,13 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
       setErrorMessage('Agregue al menos una partida de producto a la cotización.');
       return false;
     }
+    if (items.length > MAX_LETTER_ITEMS) {
+      setShowPageLimitModal(true);
+      setErrorMessage(
+        `La cotización excede la capacidad de tamaño carta (${items.length}/${MAX_LETTER_ITEMS} partidas). Genere una nueva cotización para evitar que salga en 2 páginas.`
+      );
+      return false;
+    }
     setErrorMessage('');
     return true;
   };
@@ -247,15 +271,61 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
     }
   };
 
+  // Save current 30-item quotation and start new quotation preserving client info
+  const handleSaveAndCreateNewQuotation = () => {
+    if (items.length === 0) return;
+
+    // Save current quotation
+    const quot = buildQuotationObject();
+    StorageService.saveQuotation(quot);
+
+    // Prepare next quotation
+    const nextFolio = StorageService.getNextFolio();
+    setFolio(nextFolio);
+
+    // If there was a pending product that couldn't fit, add it to the new quotation!
+    if (pendingProductToAdd) {
+      const qty = Math.max(1, addItemQty || 1);
+      const unitPrice = pendingProductToAdd.precioUnitario || 0;
+      const initialItem: QuotationItem = {
+        id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        productId: pendingProductToAdd.id,
+        cantidad: qty,
+        unidadMedida: pendingProductToAdd.unidadMedida || 'H87',
+        descripcion: pendingProductToAdd.descripcion,
+        precioUnitario: unitPrice,
+        importe: Math.round(qty * unitPrice * 100) / 100,
+      };
+      setItems([initialItem]);
+      setPendingProductToAdd(null);
+    } else {
+      setItems([]);
+    }
+
+    setShowPageLimitModal(false);
+    setSuccessMessage(
+      `¡Cotización #${quot.folio} guardada con éxito en 1 hoja! Iniciada nueva cotización #${nextFolio} para los siguientes productos.`
+    );
+    setTimeout(() => setSuccessMessage(''), 5000);
+  };
+
   // Export PDF helper
   const exportPDF = async (quot: Quotation) => {
+    if (quot.items.length > MAX_LETTER_ITEMS) {
+      setShowPageLimitModal(true);
+      setErrorMessage(
+        `Esta cotización tiene ${quot.items.length} partidas y excede el tamaño carta (1 página). Para evitar que salgan 2 páginas, divida los productos en otra cotización.`
+      );
+      return;
+    }
+
     try {
       setIsExporting(true);
       const doc = await generateQuotationPDF(quot, profile);
       doc.save(`Cotizacion_${quot.folio}_${quot.clienteNombre.slice(0, 15).trim()}.pdf`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error generating PDF:', err);
-      setErrorMessage('Ocurrió un error al exportar el PDF. Revise los datos.');
+      setErrorMessage(err?.message || 'Ocurrió un error al exportar el PDF. Revise los datos.');
     } finally {
       setIsExporting(false);
     }
@@ -535,8 +605,55 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
             </div>
           </div>
 
-          {/* Row 4: Items Table */}
+          {/* Row 4: Items Table & Letter Size Capacity Meter */}
           <div className="space-y-3">
+            {/* Monitor de Capacidad para Tamaño Carta (1 Página) */}
+            <div
+              className={`p-3.5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs transition-colors ${
+                items.length >= MAX_LETTER_ITEMS
+                  ? 'bg-red-50 border-red-300 text-red-900'
+                  : items.length >= 25
+                  ? 'bg-amber-50 border-amber-300 text-amber-900'
+                  : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <FileText className={`w-4 h-4 shrink-0 ${items.length >= MAX_LETTER_ITEMS ? 'text-red-600' : 'text-[#66C34E]'}`} />
+                <div>
+                  <span className="font-bold">Capacidad Formato Tamaño Carta (1 Página): </span>
+                  <span className="font-mono font-bold">
+                    {items.length} de {MAX_LETTER_ITEMS} partidas
+                  </span>
+                  <span className="text-[11px] ml-1.5 opacity-80">
+                    ({Math.min(100, Math.round((items.length / MAX_LETTER_ITEMS) * 100))}%)
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {items.length >= MAX_LETTER_ITEMS ? (
+                  <span className="flex items-center gap-1 font-bold text-red-700 bg-red-100 border border-red-300 px-2.5 py-0.5 rounded-full text-[11px]">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Hoja carta completa (Límite alcanzado)
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-medium text-gray-600">
+                    {MAX_LETTER_ITEMS - items.length} espacio(s) disponible(s) en esta hoja
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {items.length >= MAX_LETTER_ITEMS && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="leading-snug">
+                  <strong>Aviso al Administrador:</strong> Esta cotización ya cubrió el espacio disponible para 1 página tamaño carta.
+                  Para evitar que salgan cotizaciones en 2 páginas, los productos adicionales deberán incluirse en una nueva cotización.
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-gray-900 uppercase">
                 Partidas de la Cotización ({items.length})
@@ -545,7 +662,9 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
               <button
                 type="button"
                 onClick={handleAddBlankItem}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-dashed border-gray-400 text-gray-700 hover:border-[#66C34E] hover:text-[#66C34E] text-xs font-medium transition cursor-pointer"
+                disabled={items.length >= MAX_LETTER_ITEMS}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-dashed border-gray-400 text-gray-700 hover:border-[#66C34E] hover:text-[#66C34E] text-xs font-medium transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title={items.length >= MAX_LETTER_ITEMS ? 'Límite de hoja carta alcanzado' : 'Agregar fila manual'}
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>+ Fila Manual</span>
@@ -802,6 +921,58 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
           profile={profile}
           onClose={() => setPreviewQuotation(null)}
         />
+      )}
+
+      {/* Modal de Aviso al Administrador: Capacidad de Tamaño Carta Cubierta */}
+      {showPageLimitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 animate-in fade-in zoom-in-95 border-t-4 border-[#66C34E]">
+            <div className="flex items-center gap-3 text-amber-600 mb-3">
+              <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200">
+                <AlertTriangle className="w-7 h-7 text-amber-600 shrink-0" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-gray-900 leading-snug">
+                  Aviso al Administrador
+                </h3>
+                <span className="text-xs text-amber-700 font-semibold">
+                  Capacidad de Tamaño Carta Cubierta ({MAX_LETTER_ITEMS} partidas)
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-gray-700 leading-relaxed mt-2">
+              Al ir agregando productos a la cotización ya cubrió el espacio disponible para el formato oficial en <strong>tamaño carta (1 página)</strong>.
+            </p>
+
+            <div className="my-3.5 p-3.5 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-800 space-y-1.5">
+              <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-[#66C34E]" />
+                Regla de Formato Institucional:
+              </div>
+              <p className="text-gray-600">
+                Para que no salgan cotizaciones en <strong>2 páginas</strong> y conserve la presentación idéntica a la muestra, debe llenar una nueva cotización para los productos restantes.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 mt-5">
+              <button
+                type="button"
+                onClick={handleSaveAndCreateNewQuotation}
+                className="flex-1 py-2.5 px-4 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+              >
+                Guardar y Llenar Nueva Cotización
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPageLimitModal(false)}
+                className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold transition active:scale-95 cursor-pointer"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

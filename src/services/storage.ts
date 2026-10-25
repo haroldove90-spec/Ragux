@@ -44,8 +44,9 @@ export const StorageService = {
   // Role
   getActiveRole(): RoleType | null {
     try {
-      const role = localStorage.getItem(STORAGE_KEYS.ACTIVE_ROLE) as RoleType | null;
-      return role || null;
+      const role = localStorage.getItem(STORAGE_KEYS.ACTIVE_ROLE);
+      if (role === 'admin') return 'admin';
+      return null;
     } catch {
       return null;
     }

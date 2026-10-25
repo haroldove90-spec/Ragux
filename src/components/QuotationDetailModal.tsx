@@ -20,13 +20,20 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
   if (!quotation) return null;
 
   const handleDownloadPDF = async () => {
+    if (quotation.items.length > 30) {
+      window.alert(
+        `Aviso al Administrador: Esta cotización tiene ${quotation.items.length} partidas y excede la capacidad de 1 página tamaño carta (máximo 30 partidas). Para evitar que salgan cotizaciones en 2 páginas, debe llenar otra cotización nueva para los productos restantes.`
+      );
+      return;
+    }
+
     try {
       setDownloading(true);
       const doc = await generateQuotationPDF(quotation, profile);
       doc.save(`Cotizacion_${quotation.folio}_${quotation.clienteNombre.slice(0, 15).trim()}.pdf`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error generating PDF:', err);
-      window.alert('No se pudo generar el archivo PDF. Intente de nuevo.');
+      window.alert(err?.message || 'No se pudo generar el archivo PDF. Intente de nuevo.');
     } finally {
       setDownloading(false);
     }

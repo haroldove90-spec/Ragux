@@ -1,4 +1,4 @@
-export type RoleType = 'admin' | 'vendedor' | 'almacen' | 'contabilidad';
+export type RoleType = 'admin';
 
 export interface RoleInfo {
   id: RoleType;

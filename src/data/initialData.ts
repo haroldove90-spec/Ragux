@@ -8,24 +8,6 @@ export const APP_ROLES: RoleInfo[] = [
     description: 'Acceso total: crear y gestionar cotizaciones, catálogo, clientes y configuración.',
     badgeColor: '#66C34E',
   },
-  {
-    id: 'vendedor',
-    name: 'Ventas',
-    description: 'Creación rápida de cotizaciones comerciales y consulta de clientes.',
-    badgeColor: '#3B82F6',
-  },
-  {
-    id: 'almacen',
-    name: 'Almacén',
-    description: 'Revisión de productos cotizados, verificación de stock y despachos.',
-    badgeColor: '#F59E0B',
-  },
-  {
-    id: 'contabilidad',
-    name: 'Contabilidad',
-    description: 'Supervisión de montos, totales fiscales y reportes de facturación.',
-    badgeColor: '#8B5CF6',
-  },
 ];
 
 export const INITIAL_COMPANY_PROFILE: CompanyProfile = {
