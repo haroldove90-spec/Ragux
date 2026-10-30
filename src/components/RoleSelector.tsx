@@ -21,9 +21,9 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onSelectRole }) => {
             {/* Logo del sistema - no encapsulado */}
             <div className="w-full flex items-center justify-center h-28 sm:h-32 mb-6">
               <img
-                src="https://appdesignproyectos.com/raguxlogo.png"
+                src="https://appdesignproyectos.com/raguxdistribuciones.jpeg"
                 alt="ROGUX"
-                className="max-h-full max-w-full object-contain transition-transform duration-200 group-hover:scale-105"
+                className="max-h-full max-w-full object-contain rounded-full shadow-md transition-transform duration-200 group-hover:scale-105"
               />
             </div>
 

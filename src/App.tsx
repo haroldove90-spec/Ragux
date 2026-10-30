@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Client, CompanyProfile, Product, Quotation, RoleType } from './types';
+import { Client, CompanyProfile, Product, Quotation, RoleType, SaleNote } from './types';
 import { StorageService } from './services/storage';
 import { SplashScreen } from './components/SplashScreen';
 import { RoleSelector } from './components/RoleSelector';
@@ -13,6 +13,8 @@ import { BottomNav, NavTab } from './components/BottomNav';
 import { Sidebar } from './components/Sidebar';
 import { QuotationForm } from './components/QuotationForm';
 import { QuotationsList } from './components/QuotationsList';
+import { SaleNoteForm } from './components/SaleNoteForm';
+import { SaleNotesList } from './components/SaleNotesList';
 import { ProductsModule } from './components/ProductsModule';
 import { ClientsModule } from './components/ClientsModule';
 import { ProfileModule } from './components/ProfileModule';
@@ -27,16 +29,19 @@ export default function App() {
   // Application state loaded from StorageService (offline ready)
   const [profile, setProfile] = useState<CompanyProfile>(() => StorageService.getProfile());
   const [quotations, setQuotations] = useState<Quotation[]>(() => StorageService.getQuotations());
+  const [saleNotes, setSaleNotes] = useState<SaleNote[]>(() => StorageService.getSaleNotes());
   const [products, setProducts] = useState<Product[]>(() => StorageService.getProducts());
   const [clients, setClients] = useState<Client[]>(() => StorageService.getClients());
 
-  // Quotation being edited or cloned in form
+  // Documents being edited or cloned in form
   const [editingQuotation, setEditingQuotation] = useState<Quotation | null>(null);
+  const [editingSaleNote, setEditingSaleNote] = useState<SaleNote | null>(null);
 
-  // Reload data from storage
+  // Reload all data from storage
   const refreshAllData = () => {
     setProfile(StorageService.getProfile());
     setQuotations(StorageService.getQuotations());
+    setSaleNotes(StorageService.getSaleNotes());
     setProducts(StorageService.getProducts());
     setClients(StorageService.getClients());
   };
@@ -50,11 +55,12 @@ export default function App() {
     StorageService.setActiveRole(null);
     setActiveRole(null);
     setEditingQuotation(null);
+    setEditingSaleNote(null);
   };
 
+  // Quotation handlers
   const handleQuotationSaved = (savedQuotation: Quotation) => {
     refreshAllData();
-    // Navigate to history after saving
     setActiveTab('cotizaciones');
   };
 
@@ -66,6 +72,22 @@ export default function App() {
   const handleEditQuotation = (quotation: Quotation) => {
     setEditingQuotation(quotation);
     setActiveTab('nueva_cotizacion');
+  };
+
+  // Sale Note handlers
+  const handleSaleNoteSaved = (savedSaleNote: SaleNote) => {
+    refreshAllData();
+    setActiveTab('notas_venta');
+  };
+
+  const handleNewSaleNote = () => {
+    setEditingSaleNote(null);
+    setActiveTab('nueva_nota_venta');
+  };
+
+  const handleEditSaleNote = (saleNote: SaleNote) => {
+    setEditingSaleNote(saleNote);
+    setActiveTab('nueva_nota_venta');
   };
 
   const handleSelectClientForQuotation = (client: Client) => {
@@ -101,7 +123,7 @@ export default function App() {
       {/* 1. Splash Screen on initial load */}
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
 
-      {/* 2. Role Selector (No header, clean 2 cols mobile / 4 cols desktop, unboxed logo) */}
+      {/* 2. Role Selector (No header, clean, unboxed logo) */}
       {!activeRole ? (
         <RoleSelector onSelectRole={handleSelectRole} />
       ) : (
@@ -143,6 +165,27 @@ export default function App() {
                 />
               )}
 
+              {activeTab === 'nueva_nota_venta' && (
+                <SaleNoteForm
+                  profile={profile}
+                  clients={clients}
+                  products={products}
+                  onSaved={handleSaleNoteSaved}
+                  onRefreshData={refreshAllData}
+                  initialSaleNote={editingSaleNote}
+                />
+              )}
+
+              {activeTab === 'notas_venta' && (
+                <SaleNotesList
+                  saleNotes={saleNotes}
+                  profile={profile}
+                  onRefresh={refreshAllData}
+                  onNewSaleNote={handleNewSaleNote}
+                  onEditSaleNote={handleEditSaleNote}
+                />
+              )}
+
               {activeTab === 'productos' && (
                 <ProductsModule
                   products={products}
@@ -175,3 +218,4 @@ export default function App() {
     </div>
   );
 }
+

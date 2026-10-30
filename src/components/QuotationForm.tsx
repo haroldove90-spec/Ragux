@@ -18,6 +18,8 @@ import { StorageService } from '../services/storage';
 import { numeroALetras } from '../utils/numberToWords';
 import { generateQuotationPDF, MAX_LETTER_ITEMS } from '../utils/pdfGenerator';
 import { QuotationDetailModal } from './QuotationDetailModal';
+import { SmartProductSearchModal } from './SmartProductSearchModal';
+import { SmartClientSearchModal } from './SmartClientSearchModal';
 
 interface QuotationFormProps {
   profile: CompanyProfile;
@@ -81,6 +83,8 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [showPageLimitModal, setShowPageLimitModal] = useState(false);
   const [pendingProductToAdd, setPendingProductToAdd] = useState<Product | null>(null);
+  const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
+  const [isClientSearchOpen, setIsClientSearchOpen] = useState(false);
 
   // Initialize or reset form
   useEffect(() => {
@@ -393,6 +397,46 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 pb-20">
+      {/* Smart Search Modals */}
+      <SmartProductSearchModal
+        isOpen={isProductSearchOpen}
+        onClose={() => setIsProductSearchOpen(false)}
+        products={products}
+        onSelectProduct={(product, quantity) => {
+          if (items.length >= MAX_LETTER_ITEMS) {
+            setPendingProductToAdd(product);
+            setShowPageLimitModal(true);
+            return;
+          }
+          const newItem: QuotationItem = {
+            id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            productId: product.id,
+            codigo: product.codigo,
+            cantidad: quantity || 1,
+            unidadMedida: product.unidadMedida || 'H87',
+            descripcion: product.descripcion,
+            precioUnitario: product.precioUnitario,
+            importe: Math.round((quantity || 1) * product.precioUnitario * 100) / 100,
+          };
+          setItems((prev) => [...prev, newItem]);
+        }}
+        title="Buscador Inteligente de Productos (Cotización)"
+      />
+
+      <SmartClientSearchModal
+        isOpen={isClientSearchOpen}
+        onClose={() => setIsClientSearchOpen(false)}
+        clients={clients}
+        onSelectClient={(client) => {
+          setSelectedClientId(client.id);
+          setClienteNombre(client.nombre);
+          setClienteRfc(client.rfc || '');
+          setClienteDireccion(client.direccion || '');
+          setClienteCiudad(client.ciudad || '');
+          setClienteTelefono(client.telefono || '');
+        }}
+      />
+
       {/* Alert Banners */}
       {successMessage && (
         <div className="p-4 rounded-xl bg-green-50 border border-green-200 text-green-800 flex items-center gap-3 animate-in fade-in">
@@ -514,20 +558,31 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
                 </span>
               </div>
 
-              {/* Botón desplegable para seleccionar clientes registrados */}
-              <div className="w-full sm:w-72">
-                <select
-                  value={selectedClientId}
-                  onChange={(e) => handleSelectClient(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs font-semibold bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#66C34E]"
+              {/* Botón desplegable y buscador inteligente para clientes */}
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsClientSearchOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-lg border border-emerald-200 transition cursor-pointer"
                 >
-                  <option value="">-- Seleccionar Cliente Registrado --</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre} ({c.rfc || 'Sin RFC'})
-                    </option>
-                  ))}
-                </select>
+                  <Search className="w-3.5 h-3.5 text-[#66C34E]" />
+                  <span>Buscador Inteligente</span>
+                </button>
+
+                <div className="w-full sm:w-64">
+                  <select
+                    value={selectedClientId}
+                    onChange={(e) => handleSelectClient(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs font-semibold bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#66C34E]"
+                  >
+                    <option value="">-- Seleccionar Registrado --</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre} ({c.rfc || 'Sin RFC'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -607,9 +662,14 @@ export const QuotationForm: React.FC<QuotationFormProps> = ({
                 <PackagePlus className="w-4 h-4 text-[#66C34E]" />
                 Agregar Producto del Catálogo Registrado
               </span>
-              <span className="text-[11px] text-emerald-700">
-                Selecciona de tus productos precargados para llenar más rápido
-              </span>
+              <button
+                type="button"
+                onClick={() => setIsProductSearchOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer"
+              >
+                <Search className="w-3.5 h-3.5 text-[#66C34E]" />
+                <span>Buscador Inteligente de Productos</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">

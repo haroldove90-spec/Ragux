@@ -7,6 +7,7 @@ import {
   Users,
   LogOut,
   Sparkles,
+  FileCheck,
 } from 'lucide-react';
 import { NavTab } from './BottomNav';
 import { RoleType } from '../types';
@@ -35,6 +36,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'cotizaciones' as NavTab,
       label: 'Cotizaciones',
       desc: 'Historial y exportación',
+      icon: FileText,
+    },
+    {
+      id: 'nueva_nota_venta' as NavTab,
+      label: 'Nueva Nota de Venta',
+      desc: 'Generar comprobante / pagaré',
+      icon: FileCheck,
+    },
+    {
+      id: 'notas_venta' as NavTab,
+      label: 'Notas de Venta',
+      desc: 'Historial y pagarés carta',
       icon: FileText,
     },
     {

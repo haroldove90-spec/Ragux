@@ -1,7 +1,14 @@
 import React from 'react';
-import { FilePlus, FileText, Package, User, Users } from 'lucide-react';
+import { FilePlus, FileText, Package, User, Users, FileCheck } from 'lucide-react';
 
-export type NavTab = 'nueva_cotizacion' | 'cotizaciones' | 'productos' | 'clientes' | 'perfil';
+export type NavTab =
+  | 'nueva_cotizacion'
+  | 'cotizaciones'
+  | 'nueva_nota_venta'
+  | 'notas_venta'
+  | 'productos'
+  | 'clientes'
+  | 'perfil';
 
 interface BottomNavProps {
   activeTab: NavTab;
@@ -11,14 +18,19 @@ interface BottomNavProps {
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {
   const navItems = [
     {
-      id: 'nueva_cotizacion' as NavTab,
-      label: 'Nueva',
-      icon: FilePlus,
-    },
-    {
       id: 'cotizaciones' as NavTab,
       label: 'Cotizaciones',
       icon: FileText,
+    },
+    {
+      id: 'notas_venta' as NavTab,
+      label: 'Notas Venta',
+      icon: FileCheck,
+    },
+    {
+      id: 'nueva_cotizacion' as NavTab,
+      label: '+ Cotización',
+      icon: FilePlus,
     },
     {
       id: 'productos' as NavTab,

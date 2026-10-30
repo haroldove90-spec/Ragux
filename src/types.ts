@@ -74,6 +74,58 @@ export interface Client {
   contacto?: string;
 }
 
+export interface SaleNoteItem {
+  id: string;
+  productId?: string;
+  codigo?: string;
+  cantidad: number;
+  unidad: string; // e.g. PIEZAS, BULTO, H87, CAJA
+  descripcion: string;
+  precioUnitario: number;
+  importe: number;
+}
+
+export interface SaleNote {
+  id: string;
+  folio: string; // e.g. "003087"
+  fechaEmision: string; // YYYY-MM-DD
+  lugarExpedicion: string; // e.g. "SAN LUIS POTOSI, San Luis Potosi"
+  
+  // Emisor info (for print/PDF)
+  emisorNombre: string;
+  emisorDireccion: string;
+  emisorColoniaCp: string;
+  emisorCiudadEstado: string;
+  emisorTelefono: string;
+  emisorEmail: string;
+
+  // Client info ("Vendido a:")
+  clienteId?: string;
+  clienteNombre: string;
+  clienteRfc: string;
+  clienteDireccion: string;
+  clienteColoniaCp?: string;
+  clienteCiudad: string;
+  clienteTelefono: string;
+
+  // Items
+  items: SaleNoteItem[];
+
+  // Totales
+  subtotal: number;
+  descuento: number;
+  total: number;
+  totalLetra: string;
+
+  // Footer fields
+  observaciones: string;
+  textoPagare?: string;
+
+  fechaCreacion: string;
+  estado: 'pagada' | 'pendiente' | 'cancelada';
+  sincronizado: boolean;
+}
+
 export interface CompanyProfile {
   nombreComercial: string;
   razonSocial: string;
@@ -91,4 +143,6 @@ export interface CompanyProfile {
   };
   logoUrl: string;
   ultimoFolio: number;
+  ultimoFolioNota?: number;
 }
+

@@ -67,6 +67,7 @@ export const ProfileModule: React.FC<ProfileModuleProps> = ({
     const backupData = {
       profile: StorageService.getProfile(),
       quotations: StorageService.getQuotations(),
+      saleNotes: StorageService.getSaleNotes(),
       products: StorageService.getProducts(),
       clients: StorageService.getClients(),
       timestamp: new Date().toISOString(),

@@ -1,11 +1,11 @@
-import { Client, CompanyProfile, Product, Quotation, RoleInfo } from '../types';
+import { Client, CompanyProfile, Product, Quotation, RoleInfo, SaleNote } from '../types';
 import { numeroALetras } from '../utils/numberToWords';
 
 export const APP_ROLES: RoleInfo[] = [
   {
     id: 'admin',
     name: 'Admin',
-    description: 'Acceso total: crear y gestionar cotizaciones, catálogo, clientes y configuración.',
+    description: 'Acceso total: crear y gestionar cotizaciones, notas de venta, catálogo, clientes y configuración.',
     badgeColor: '#66C34E',
   },
 ];
@@ -14,22 +14,33 @@ export const INITIAL_COMPANY_PROFILE: CompanyProfile = {
   nombreComercial: 'LAURA GUEL GUERRERO (RAGUXDISTRIBUCIONES)',
   razonSocial: 'LAURA GUEL GUERRERO',
   rfc: 'GUGL780927NRA',
-  direccionCalle: 'MERCURIO #105',
-  coloniaCp: 'VALLE VERDE C.P. 78244',
-  ciudadEstado: 'SAN LUIS POTOSI, SAN LUIS POTOSI',
-  telefono: '(444) 235-58-01',
-  email: 'ventas@raguxdistribuciones.com',
-  lugarExpedicionDefecto: 'SAN LUIS POTOSI, SAN LUIS POTOSI',
+  direccionCalle: 'VILLERIAS #273',
+  coloniaCp: 'SAUCITO C.P. 78110',
+  ciudadEstado: 'SAN LUIS POTOSI, San Luis Potosi',
+  telefono: '(444)-3053182',
+  email: 'raguxdistribuciones@gmail.com',
+  lugarExpedicionDefecto: 'SAN LUIS POTOSI, San Luis Potosi',
   terminosPorDefecto: {
     validez: '30 DÍAS / VIGENCIA INMEDIATA',
     tiempoEntrega: 'INMEDIATA SALVO PREVIA VENTA',
     formaPago: 'PAGO EN PARCIALIDADES O DIFERIDO',
   },
-  logoUrl: 'https://appdesignproyectos.com/raguxlogo.png',
+  logoUrl: 'https://appdesignproyectos.com/raguxdistribuciones.jpeg',
   ultimoFolio: 1963,
+  ultimoFolioNota: 3087,
 };
 
 export const INITIAL_CLIENTS: Client[] = [
+  {
+    id: 'cli-004',
+    nombre: 'MAXSTORE SUCURSAL ARRIAGA',
+    rfc: 'SEFA900405BC9',
+    direccion: 'VILLA DE ARRIAGA s/n',
+    ciudad: 'VILLA DE ARRIAGA , SAN LUIS POTOSI',
+    telefono: '( ) - - -',
+    email: 'maxstore.arriaga@ejemplo.com',
+    contacto: 'Sucursal Arriaga (C.P. 78490 Centro)',
+  },
   {
     id: 'cli-001',
     nombre: 'FRANCISCO JAVIER MATA MOLINA',
@@ -333,6 +344,42 @@ export const INITIAL_PRODUCTS: Product[] = [
     categoria: 'Cremas Corporales',
     stock: 95,
   },
+  {
+    id: 'prod-31',
+    codigo: 'M00054',
+    descripcion: 'SALSA VALENTINA PICANTE 24/370ML 097339000054 -M00054',
+    unidadMedida: 'PIEZAS',
+    precioUnitario: 15.95,
+    categoria: 'Abarrotes y Alimentos',
+    stock: 350,
+  },
+  {
+    id: 'prod-32',
+    codigo: 'BULTO-01',
+    descripcion: 'BIG FACIAL QUALITY 600 HOJAS PAPEL HIGIENICO *********** BULTO C/8PAQUETES *********** -',
+    unidadMedida: 'PIEZAS',
+    precioUnitario: 515.87,
+    categoria: 'Papel e Higiene',
+    stock: 60,
+  },
+  {
+    id: 'prod-33',
+    codigo: 'M1132',
+    descripcion: 'DODYS TOALLITA 80PZS AZUL- 7502221010729 M1132',
+    unidadMedida: 'PIEZAS',
+    precioUnitario: 27.46,
+    categoria: 'Higiene y Desinfección',
+    stock: 140,
+  },
+  {
+    id: 'prod-34',
+    codigo: 'M4302',
+    descripcion: 'SERVILLETA PETALO C/100 7501007704302 M4302',
+    unidadMedida: 'PIEZAS',
+    precioUnitario: 19.85,
+    categoria: 'Papel e Higiene',
+    stock: 200,
+  },
 ];
 
 // Sample items matching the exact user sample quotation #001963
@@ -399,3 +446,82 @@ export const INITIAL_QUOTATIONS: Quotation[] = [
     sincronizado: true,
   },
 ];
+
+// Sample items from the user's uploaded Nota de Venta #003087
+const sampleSaleNoteItems = [
+  {
+    id: 'nota-item-1',
+    productId: 'prod-31',
+    codigo: 'M00054',
+    cantidad: 24,
+    unidad: 'PIEZAS',
+    descripcion: 'SALSA VALENTINA PICANTE 24/370ML 097339000054 -M00054',
+    precioUnitario: 15.95,
+    importe: 382.80,
+  },
+  {
+    id: 'nota-item-2',
+    productId: 'prod-32',
+    codigo: 'BULTO-01',
+    cantidad: 1,
+    unidad: 'PIEZAS',
+    descripcion: 'BIG FACIAL QUALITY 600 HOJAS PAPEL HIGIENICO *********** BULTO C/8PAQUETES *********** -',
+    precioUnitario: 515.87,
+    importe: 515.87,
+  },
+  {
+    id: 'nota-item-3',
+    productId: 'prod-33',
+    codigo: 'M1132',
+    cantidad: 36,
+    unidad: 'PIEZAS',
+    descripcion: 'DODYS TOALLITA 80PZS AZUL- 7502221010729 M1132',
+    precioUnitario: 27.46,
+    importe: 988.56,
+  },
+  {
+    id: 'nota-item-4',
+    productId: 'prod-34',
+    codigo: 'M4302',
+    cantidad: 10,
+    unidad: 'PIEZAS',
+    descripcion: 'SERVILLETA PETALO C/100 7501007704302 M4302',
+    precioUnitario: 19.85,
+    importe: 198.50,
+  },
+];
+
+const notaSubtotal = sampleSaleNoteItems.reduce((acc, curr) => acc + curr.importe, 0);
+const notaTotalRedondeado = Math.round(notaSubtotal * 100) / 100;
+
+export const INITIAL_SALE_NOTES: SaleNote[] = [
+  {
+    id: 'nota-003087',
+    folio: '003087',
+    fechaEmision: '2026-10-22',
+    lugarExpedicion: 'SAN LUIS POTOSI, San Luis Potosi',
+    emisorNombre: 'RAGUX DISTRIBUCIONES',
+    emisorDireccion: 'VILLERIAS #273',
+    emisorColoniaCp: 'SAUCITO C.P. 78110',
+    emisorCiudadEstado: 'SAN LUIS POTOSI, San Luis Potosi',
+    emisorTelefono: 'TEL. whatsapp (444)-3053182',
+    emisorEmail: 'correo. raguxdistribuciones@gmail.com',
+    clienteId: 'cli-004',
+    clienteNombre: 'MAXSTORE SUCURSAL ARRIAGA',
+    clienteRfc: 'SEFA900405BC9',
+    clienteDireccion: 'VILLA DE ARRIAGA s/n',
+    clienteColoniaCp: 'CENTRO C.P. 78490',
+    clienteCiudad: 'VILLA DE ARRIAGA , SAN LUIS POTOSI',
+    clienteTelefono: '( ) - - -',
+    items: sampleSaleNoteItems,
+    subtotal: notaTotalRedondeado,
+    descuento: 0,
+    total: notaTotalRedondeado,
+    totalLetra: 'DOS MIL OCHENTA Y CINCO PESOS 73/100 M.N.',
+    observaciones: 'ESTIMADO CLIENTE UNA VEZ CHECADA,ENTREGADA,ACEPTADA LAMERCANCIA Y FIRMADA ESTE COMPROBANTE POR NIGUN MOTIVO SE ACEPTAN RECLAMACIONES Y/O DEVOLUCIONES POSTERIORES A LA FECHA DE ENTREGA FAVOR DE REVISAR BIEN SU MERCANCIA. GRACIAS.',
+    fechaCreacion: '2026-10-22T14:30:00Z',
+    estado: 'pagada',
+    sincronizado: true,
+  },
+];
+

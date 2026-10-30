@@ -10,9 +10,11 @@ import {
   DollarSign,
   X,
   Boxes,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Product } from '../types';
 import { StorageService } from '../services/storage';
+import { exportProductsToExcel } from '../utils/excelExporter';
 
 interface ProductsModuleProps {
   products: Product[];
@@ -118,14 +120,26 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({ products, onRefr
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          type="button"
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Registrar Producto</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportProductsToExcel(filtered)}
+            type="button"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+            title="Exportar catálogo completo a Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Exportar Excel</span>
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            type="button"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Registrar Producto</span>
+          </button>
+        </div>
       </div>
 
       {successMessage && (

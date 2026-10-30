@@ -21,9 +21,9 @@ export const Header: React.FC<HeaderProps> = ({ activeRole, onLogout }) => {
         {/* Left: Logotipo del sistema - no encapsulado */}
         <div className="flex items-center gap-3">
           <img
-            src="https://appdesignproyectos.com/raguxlogo.png"
+            src="https://appdesignproyectos.com/raguxdistribuciones.jpeg"
             alt="ROGUX"
-            className="h-9 sm:h-11 w-auto object-contain cursor-pointer"
+            className="h-10 sm:h-12 w-auto object-contain rounded-full shadow-2xs cursor-pointer"
           />
           <div className="hidden sm:flex flex-col">
             <span className="text-xs uppercase tracking-widest text-[#66C34E] font-bold leading-tight">

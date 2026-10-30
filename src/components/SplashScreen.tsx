@@ -31,9 +31,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
       <div className="flex flex-col items-center p-6 max-w-sm text-center">
         {/* Unboxed logo as requested */}
         <img
-          src="https://appdesignproyectos.com/raguxlogo.png"
+          src="https://appdesignproyectos.com/raguxdistribuciones.jpeg"
           alt="ROGUX Distribuciones"
-          className="h-28 w-auto object-contain mb-6 animate-pulse"
+          className="h-28 w-28 rounded-full shadow-lg object-contain mb-6 animate-pulse"
           onError={(e) => {
             // High-fidelity fallback if offline
             (e.target as HTMLElement).style.display = 'none';

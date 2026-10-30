@@ -11,9 +11,11 @@ import {
   Mail,
   X,
   Building,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Client } from '../types';
 import { StorageService } from '../services/storage';
+import { exportClientsToExcel } from '../utils/excelExporter';
 
 interface ClientsModuleProps {
   clients: Client[];
@@ -120,14 +122,26 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          type="button"
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Registrar Cliente</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportClientsToExcel(filtered)}
+            type="button"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+            title="Exportar directorio de clientes a Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Exportar Excel</span>
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            type="button"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Registrar Cliente</span>
+          </button>
+        </div>
       </div>
 
       {successMessage && (

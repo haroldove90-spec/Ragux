@@ -4,16 +4,19 @@ import {
   Product,
   Quotation,
   RoleType,
+  SaleNote,
 } from '../types';
 import {
   INITIAL_CLIENTS,
   INITIAL_COMPANY_PROFILE,
   INITIAL_PRODUCTS,
   INITIAL_QUOTATIONS,
+  INITIAL_SALE_NOTES,
 } from '../data/initialData';
 
 const STORAGE_KEYS = {
   QUOTATIONS: 'rogux_quotations',
+  SALE_NOTES: 'rogux_sale_notes',
   PRODUCTS: 'rogux_products',
   CLIENTS: 'rogux_clients',
   PROFILE: 'rogux_company_profile',
@@ -75,8 +78,14 @@ export const StorageService = {
   getNextFolio(): string {
     const profile = this.getProfile();
     const nextNum = (profile.ultimoFolio || 1963) + 1;
-    // Update stored last folio
     this.updateProfile({ ultimoFolio: nextNum });
+    return nextNum.toString().padStart(6, '0');
+  },
+
+  getNextNotaFolio(): string {
+    const profile = this.getProfile();
+    const nextNum = (profile.ultimoFolioNota || 3087) + 1;
+    this.updateProfile({ ultimoFolioNota: nextNum });
     return nextNum.toString().padStart(6, '0');
   },
 
@@ -103,7 +112,6 @@ export const StorageService = {
     
     safeSet(STORAGE_KEYS.QUOTATIONS, updated);
 
-    // Queue for future Supabase sync
     this.addToSyncQueue({
       action: existingIndex >= 0 ? 'UPDATE' : 'CREATE',
       entity: 'quotations',
@@ -120,6 +128,48 @@ export const StorageService = {
     this.addToSyncQueue({
       action: 'DELETE',
       entity: 'quotations',
+      data: { id },
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  // Sale Notes (Notas de Venta)
+  getSaleNotes(): SaleNote[] {
+    return safeGet<SaleNote[]>(STORAGE_KEYS.SALE_NOTES, INITIAL_SALE_NOTES);
+  },
+
+  getSaleNoteById(id: string): SaleNote | undefined {
+    return this.getSaleNotes().find((n) => n.id === id);
+  },
+
+  saveSaleNote(note: SaleNote): void {
+    const current = this.getSaleNotes();
+    const existingIndex = current.findIndex((n) => n.id === note.id);
+    let updated: SaleNote[];
+
+    if (existingIndex >= 0) {
+      updated = [...current];
+      updated[existingIndex] = note;
+    } else {
+      updated = [note, ...current];
+    }
+
+    safeSet(STORAGE_KEYS.SALE_NOTES, updated);
+    this.addToSyncQueue({
+      action: existingIndex >= 0 ? 'UPDATE' : 'CREATE',
+      entity: 'sale_notes',
+      data: note,
+      timestamp: new Date().toISOString(),
+    });
+  },
+
+  deleteSaleNote(id: string): void {
+    const current = this.getSaleNotes();
+    const filtered = current.filter((n) => n.id !== id);
+    safeSet(STORAGE_KEYS.SALE_NOTES, filtered);
+    this.addToSyncQueue({
+      action: 'DELETE',
+      entity: 'sale_notes',
       data: { id },
       timestamp: new Date().toISOString(),
     });
@@ -214,7 +264,6 @@ export const StorageService = {
 
   clearSyncQueue(): void {
     safeSet(STORAGE_KEYS.SYNC_QUEUE, []);
-    // Also mark all quotations as synchronized
     const quotations = this.getQuotations().map((q) => ({ ...q, sincronizado: true }));
     safeSet(STORAGE_KEYS.QUOTATIONS, quotations);
   },
@@ -222,9 +271,11 @@ export const StorageService = {
   // Reset to factory sample data
   resetToSampleData(): void {
     safeSet(STORAGE_KEYS.QUOTATIONS, INITIAL_QUOTATIONS);
+    safeSet(STORAGE_KEYS.SALE_NOTES, INITIAL_SALE_NOTES);
     safeSet(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
     safeSet(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
     safeSet(STORAGE_KEYS.PROFILE, INITIAL_COMPANY_PROFILE);
     safeSet(STORAGE_KEYS.SYNC_QUEUE, []);
   },
 };
+

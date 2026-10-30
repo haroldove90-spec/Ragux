@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Download, Printer, X, Check, Loader2 } from 'lucide-react';
+import { Download, Printer, X, Check, Loader2, FileSpreadsheet } from 'lucide-react';
 import { CompanyProfile, Quotation } from '../types';
 import { generateQuotationPDF } from '../utils/pdfGenerator';
+import { exportSingleQuotationToExcel } from '../utils/excelExporter';
 
 interface QuotationDetailModalProps {
   quotation: Quotation | null;
@@ -78,6 +79,16 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
             </button>
 
             <button
+              onClick={() => exportSingleQuotationToExcel(quotation)}
+              type="button"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition active:scale-95 cursor-pointer"
+              title="Exportar a Excel"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Excel</span>
+            </button>
+
+            <button
               onClick={handlePrint}
               type="button"
               className="hidden sm:flex items-center gap-1 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-medium transition cursor-pointer"
@@ -104,7 +115,7 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
               {/* Logo - no encapsulado */}
               <div className="shrink-0 flex items-center justify-center">
                 <img
-                  src={profile.logoUrl || 'https://appdesignproyectos.com/raguxlogo.png'}
+                  src={profile.logoUrl || 'https://appdesignproyectos.com/raguxdistribuciones.jpeg'}
                   alt="ROGUX Logo"
                   className="h-16 sm:h-20 w-auto object-contain"
                 />

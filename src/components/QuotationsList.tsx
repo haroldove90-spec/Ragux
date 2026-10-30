@@ -12,11 +12,13 @@ import {
   CheckCircle,
   Clock,
   Loader2,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { CompanyProfile, Quotation } from '../types';
 import { StorageService } from '../services/storage';
 import { generateQuotationPDF } from '../utils/pdfGenerator';
 import { QuotationDetailModal } from './QuotationDetailModal';
+import { exportQuotationsToExcel, exportSingleQuotationToExcel } from '../utils/excelExporter';
 
 interface QuotationsListProps {
   quotations: Quotation[];
@@ -168,7 +170,17 @@ export const QuotationsList: React.FC<QuotationsListProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+            <button
+              type="button"
+              onClick={() => exportQuotationsToExcel(filtered)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+              title="Exportar todas las cotizaciones a Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Exportar Excel</span>
+            </button>
+
             <div className="flex rounded-xl bg-gray-100 p-1 text-xs font-medium">
               <button
                 type="button"
@@ -290,6 +302,16 @@ export const QuotationsList: React.FC<QuotationsListProps> = ({
                         <Download className="w-4 h-4" />
                       )}
                       <span className="hidden sm:inline">PDF</span>
+                    </button>
+
+                    <button
+                      onClick={() => exportSingleQuotationToExcel(q)}
+                      type="button"
+                      className="flex items-center gap-1 px-2.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+                      title="Exportar cotización a Excel (.xlsx)"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      <span className="hidden sm:inline">Excel</span>
                     </button>
 
                     <button

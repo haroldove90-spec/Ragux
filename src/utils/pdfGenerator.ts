@@ -53,7 +53,7 @@ export async function generateQuotationPDF(
   // Try to load logo
   let logoBase64: string | null = null;
   try {
-    logoBase64 = await loadImageAsBase64(profile.logoUrl || 'https://appdesignproyectos.com/raguxlogo.png');
+    logoBase64 = await loadImageAsBase64(profile.logoUrl || 'https://appdesignproyectos.com/raguxdistribuciones.jpeg');
   } catch {
     logoBase64 = null;
   }
