@@ -1,4 +1,16 @@
-export type RoleType = 'admin';
+export type RoleType = 'admin' | 'vendedor' | 'almacen' | 'empleado';
+export type UserRole = 'admin' | 'vendedor' | 'almacen' | 'empleado';
+
+export interface UserAccount {
+  id: string;
+  nombre: string;
+  usuario: string;
+  clave: string;
+  rol: UserRole;
+  telefono?: string;
+  activo: boolean;
+  createdAt?: string;
+}
 
 export interface RoleInfo {
   id: RoleType;

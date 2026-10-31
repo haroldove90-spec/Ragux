@@ -62,6 +62,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       desc: 'Directorio y fiscales',
       icon: Users,
     },
+    ...(activeRole === 'admin'
+      ? [
+          {
+            id: 'empleados' as NavTab,
+            label: 'Empleados',
+            desc: 'Usuarios, accesos y WhatsApp',
+            icon: Sparkles,
+          },
+        ]
+      : []),
     {
       id: 'perfil' as NavTab,
       label: 'Perfil Fiscal',

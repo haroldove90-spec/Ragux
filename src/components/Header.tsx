@@ -1,19 +1,25 @@
 import React from 'react';
-import { LogOut, Shield, Wifi, WifiOff } from 'lucide-react';
+import { LogOut, Shield, Wifi, WifiOff, User as UserIcon, Database } from 'lucide-react';
 import { APP_ROLES } from '../data/initialData';
-import { RoleType } from '../types';
+import { RoleType, UserAccount } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 interface HeaderProps {
   activeRole: RoleType;
+  currentUser?: UserAccount | null;
   onLogout: () => void;
   onSwitchRole?: (role: RoleType) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ activeRole, onLogout }) => {
+export const Header: React.FC<HeaderProps> = ({ activeRole, currentUser, onLogout }) => {
   const isOnline = useOnlineStatus();
-  const currentRoleInfo = APP_ROLES.find((r) => r.id === activeRole) || APP_ROLES[0];
+  const currentRoleInfo = APP_ROLES.find((r) => r.id === activeRole) || {
+    id: activeRole,
+    name: activeRole === 'admin' ? 'Admin' : activeRole === 'vendedor' ? 'Ventas' : activeRole,
+    description: '',
+    badgeColor: '#66C34E',
+  };
 
   return (
     <header className="sticky top-0 z-30 w-full bg-white border-b border-gray-200 shadow-xs">
@@ -59,10 +65,22 @@ export const Header: React.FC<HeaderProps> = ({ activeRole, onLogout }) => {
             )}
           </div>
 
-          {/* Identificación del rol activo */}
+          {/* Identificación del usuario y rol activo */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 rounded-lg border border-gray-200 text-xs font-semibold text-gray-800">
-            <Shield className="w-3.5 h-3.5 text-[#66C34E]" />
-            <span className="capitalize">{currentRoleInfo.name}</span>
+            {currentUser ? (
+              <>
+                <UserIcon className="w-3.5 h-3.5 text-[#66C34E]" />
+                <span className="max-w-[120px] sm:max-w-[180px] truncate">{currentUser.nombre}</span>
+                <span className="text-[10px] bg-white border border-gray-200 px-1 py-0.2 rounded text-emerald-700 capitalize font-bold">
+                  {currentRoleInfo.name}
+                </span>
+              </>
+            ) : (
+              <>
+                <Shield className="w-3.5 h-3.5 text-[#66C34E]" />
+                <span className="capitalize">{currentRoleInfo.name}</span>
+              </>
+            )}
           </div>
 
           {/* Botón de instalación rápida de la aplicación */}

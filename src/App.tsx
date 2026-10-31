@@ -4,10 +4,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Client, CompanyProfile, Product, Quotation, RoleType, SaleNote } from './types';
+import { Client, CompanyProfile, Product, Quotation, RoleType, SaleNote, UserAccount } from './types';
 import { StorageService } from './services/storage';
 import { SplashScreen } from './components/SplashScreen';
-import { RoleSelector } from './components/RoleSelector';
+import { LoginForm } from './components/LoginForm';
 import { Header } from './components/Header';
 import { BottomNav, NavTab } from './components/BottomNav';
 import { Sidebar } from './components/Sidebar';
@@ -17,16 +17,20 @@ import { SaleNoteForm } from './components/SaleNoteForm';
 import { SaleNotesList } from './components/SaleNotesList';
 import { ProductsModule } from './components/ProductsModule';
 import { ClientsModule } from './components/ClientsModule';
+import { EmployeesModule } from './components/EmployeesModule';
 import { ProfileModule } from './components/ProfileModule';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
-  const [activeRole, setActiveRole] = useState<RoleType | null>(() => {
-    return StorageService.getActiveRole();
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    return StorageService.getCurrentUser();
+  });
+  const [activeRole, setActiveRole] = useState<RoleType>(() => {
+    return StorageService.getActiveRole() || 'admin';
   });
   const [activeTab, setActiveTab] = useState<NavTab>('nueva_cotizacion');
 
-  // Application state loaded from StorageService (offline ready)
+  // Application state loaded from StorageService (offline ready + Supabase sync)
   const [profile, setProfile] = useState<CompanyProfile>(() => StorageService.getProfile());
   const [quotations, setQuotations] = useState<Quotation[]>(() => StorageService.getQuotations());
   const [saleNotes, setSaleNotes] = useState<SaleNote[]>(() => StorageService.getSaleNotes());
@@ -37,6 +41,17 @@ export default function App() {
   const [editingQuotation, setEditingQuotation] = useState<Quotation | null>(null);
   const [editingSaleNote, setEditingSaleNote] = useState<SaleNote | null>(null);
 
+  // Initial Supabase cloud sync in background
+  useEffect(() => {
+    StorageService.syncWithSupabase()
+      .then((res) => {
+        if (res.ok) {
+          refreshAllData();
+        }
+      })
+      .catch((err) => console.log('Supabase background sync skipped/pending tables:', err));
+  }, []);
+
   // Reload all data from storage
   const refreshAllData = () => {
     setProfile(StorageService.getProfile());
@@ -46,14 +61,15 @@ export default function App() {
     setClients(StorageService.getClients());
   };
 
-  const handleSelectRole = (role: RoleType) => {
-    StorageService.setActiveRole(role);
-    setActiveRole(role);
+  const handleLoginSuccess = (user: UserAccount) => {
+    setCurrentUser(user);
+    setActiveRole(user.rol);
+    refreshAllData();
   };
 
   const handleLogout = () => {
-    StorageService.setActiveRole(null);
-    setActiveRole(null);
+    StorageService.logout();
+    setCurrentUser(null);
     setEditingQuotation(null);
     setEditingSaleNote(null);
   };
@@ -110,10 +126,10 @@ export default function App() {
       validoHasta: profile.terminosPorDefecto.validez,
       tiempoEntrega: profile.terminosPorDefecto.tiempoEntrega,
       formaPago: profile.terminosPorDefecto.formaPago,
-      creadoPor: activeRole || 'Admin',
+      creadoPor: currentUser?.nombre || activeRole,
       fechaCreacion: new Date().toISOString(),
       estado: 'vigente',
-      sincronizado: false,
+      sincronizado: true,
     });
     setActiveTab('nueva_cotizacion');
   };
@@ -123,14 +139,18 @@ export default function App() {
       {/* 1. Splash Screen on initial load */}
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
 
-      {/* 2. Role Selector (No header, clean, unboxed logo) */}
-      {!activeRole ? (
-        <RoleSelector onSelectRole={handleSelectRole} />
+      {/* 2. Login Form (Strictly for system access) */}
+      {!currentUser ? (
+        <LoginForm onLoginSuccess={handleLoginSuccess} />
       ) : (
         /* 3. Main Application Fullscreen Layout */
         <div className="w-full min-h-screen flex flex-col">
           {/* Cabecera Institucional Unificada */}
-          <Header activeRole={activeRole} onLogout={handleLogout} />
+          <Header
+            activeRole={activeRole}
+            currentUser={currentUser}
+            onLogout={handleLogout}
+          />
 
           {/* Body with Desktop Sidebar + Main Content */}
           <div className="flex-1 flex w-full">
@@ -201,6 +221,10 @@ export default function App() {
                 />
               )}
 
+              {activeTab === 'empleados' && activeRole === 'admin' && (
+                <EmployeesModule onRefresh={refreshAllData} />
+              )}
+
               {activeTab === 'perfil' && (
                 <ProfileModule
                   profile={profile}
@@ -212,10 +236,13 @@ export default function App() {
           </div>
 
           {/* Navegación Móvil y Tablet (Bottom Bar) con fondo #66C34E */}
-          <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+          <BottomNav
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            isAdmin={activeRole === 'admin'}
+          />
         </div>
       )}
     </div>
   );
 }
-

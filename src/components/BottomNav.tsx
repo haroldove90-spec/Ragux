@@ -8,33 +8,35 @@ export type NavTab =
   | 'notas_venta'
   | 'productos'
   | 'clientes'
+  | 'empleados'
   | 'perfil';
 
 interface BottomNavProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
+  isAdmin?: boolean;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, isAdmin }) => {
   const navItems = [
     {
       id: 'cotizaciones' as NavTab,
-      label: 'Cotizaciones',
+      label: 'Cotiz.',
       icon: FileText,
     },
     {
       id: 'notas_venta' as NavTab,
-      label: 'Notas Venta',
+      label: 'Notas',
       icon: FileCheck,
     },
     {
       id: 'nueva_cotizacion' as NavTab,
-      label: '+ Cotización',
+      label: '+ Cotiz.',
       icon: FilePlus,
     },
     {
       id: 'productos' as NavTab,
-      label: 'Productos',
+      label: 'Catálogo',
       icon: Package,
     },
     {
@@ -42,6 +44,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
       label: 'Clientes',
       icon: Users,
     },
+    ...(isAdmin
+      ? [
+          {
+            id: 'empleados' as NavTab,
+            label: 'Personal',
+            icon: Users,
+          },
+        ]
+      : []),
     {
       id: 'perfil' as NavTab,
       label: 'Perfil',

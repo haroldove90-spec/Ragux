@@ -1,12 +1,41 @@
-import { Client, CompanyProfile, Product, Quotation, RoleInfo, SaleNote } from '../types';
+import { Client, CompanyProfile, Product, Quotation, RoleInfo, SaleNote, UserAccount } from '../types';
 import { numeroALetras } from '../utils/numberToWords';
+
+export const INITIAL_USERS: UserAccount[] = [
+  {
+    id: 'usr-admin',
+    nombre: 'Administrador ROGUX',
+    usuario: 'admin_123',
+    clave: 'Chevropar#1970',
+    rol: 'admin',
+    telefono: '4443053182',
+    activo: true,
+    createdAt: '2026-10-25T10:00:00Z',
+  },
+  {
+    id: 'usr-harold',
+    nombre: 'Harold Anguiano Morales',
+    usuario: 'haroldo90',
+    clave: 'Chevropar#1970',
+    rol: 'vendedor',
+    telefono: '4443053182',
+    activo: true,
+    createdAt: '2026-10-25T10:00:00Z',
+  },
+];
 
 export const APP_ROLES: RoleInfo[] = [
   {
     id: 'admin',
     name: 'Admin',
-    description: 'Acceso total: crear y gestionar cotizaciones, notas de venta, catálogo, clientes y configuración.',
+    description: 'Acceso total: crear y gestionar cotizaciones, notas de venta, catálogo, clientes, empleados y configuración.',
     badgeColor: '#66C34E',
+  },
+  {
+    id: 'vendedor',
+    name: 'Ventas',
+    description: 'Generación de cotizaciones y notas de venta en ruta.',
+    badgeColor: '#10B981',
   },
 ];
 

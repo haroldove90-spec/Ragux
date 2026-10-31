@@ -5,6 +5,7 @@ import {
   Quotation,
   RoleType,
   SaleNote,
+  UserAccount,
 } from '../types';
 import {
   INITIAL_CLIENTS,
@@ -12,13 +13,17 @@ import {
   INITIAL_PRODUCTS,
   INITIAL_QUOTATIONS,
   INITIAL_SALE_NOTES,
+  INITIAL_USERS,
 } from '../data/initialData';
+import { SupabaseService } from './supabase';
 
 const STORAGE_KEYS = {
   QUOTATIONS: 'rogux_quotations',
   SALE_NOTES: 'rogux_sale_notes',
   PRODUCTS: 'rogux_products',
   CLIENTS: 'rogux_clients',
+  USERS: 'rogux_users',
+  CURRENT_USER: 'rogux_current_user',
   PROFILE: 'rogux_company_profile',
   ACTIVE_ROLE: 'rogux_active_role',
   SYNC_QUEUE: 'rogux_sync_queue',
@@ -44,11 +49,29 @@ function safeSet<T>(key: string, value: T): void {
 }
 
 export const StorageService = {
-  // Role
+  // Current Authenticated User & Role
+  getCurrentUser(): UserAccount | null {
+    return safeGet<UserAccount | null>(STORAGE_KEYS.CURRENT_USER, null);
+  },
+
+  setCurrentUser(user: UserAccount | null): void {
+    if (user) {
+      safeSet(STORAGE_KEYS.CURRENT_USER, user);
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_ROLE, user.rol);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_ROLE);
+    }
+  },
+
   getActiveRole(): RoleType | null {
     try {
+      const user = this.getCurrentUser();
+      if (user) return user.rol;
       const role = localStorage.getItem(STORAGE_KEYS.ACTIVE_ROLE);
-      if (role === 'admin') return 'admin';
+      if (role === 'admin' || role === 'vendedor' || role === 'almacen' || role === 'empleado') {
+        return role;
+      }
       return null;
     } catch {
       return null;
@@ -60,7 +83,94 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.ACTIVE_ROLE, role);
     } else {
       localStorage.removeItem(STORAGE_KEYS.ACTIVE_ROLE);
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
     }
+  },
+
+  // USERS / EMPLOYEES
+  getUsers(): UserAccount[] {
+    const users = safeGet<UserAccount[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    // Guarantee required users exist
+    const hasAdmin = users.some((u) => u.usuario.toLowerCase() === 'admin_123');
+    const hasHarold = users.some((u) => u.usuario.toLowerCase() === 'haroldo90');
+    if (!hasAdmin || !hasHarold) {
+      const combined = [...users];
+      if (!hasAdmin) {
+        const adminSeed = INITIAL_USERS.find((u) => u.usuario === 'admin_123');
+        if (adminSeed) combined.unshift(adminSeed);
+      }
+      if (!hasHarold) {
+        const haroldSeed = INITIAL_USERS.find((u) => u.usuario === 'haroldo90');
+        if (haroldSeed) combined.push(haroldSeed);
+      }
+      safeSet(STORAGE_KEYS.USERS, combined);
+      return combined;
+    }
+    return users;
+  },
+
+  saveUser(user: UserAccount): void {
+    const current = this.getUsers();
+    const existingIndex = current.findIndex((u) => u.id === user.id || u.usuario.toLowerCase() === user.usuario.toLowerCase());
+    let updated: UserAccount[];
+
+    if (existingIndex >= 0) {
+      updated = [...current];
+      updated[existingIndex] = { ...current[existingIndex], ...user };
+    } else {
+      updated = [user, ...current];
+    }
+
+    safeSet(STORAGE_KEYS.USERS, updated);
+
+    // If currently logged in user is being updated, sync state
+    const currentUser = this.getCurrentUser();
+    if (currentUser && currentUser.id === user.id) {
+      this.setCurrentUser(user);
+    }
+
+    // Push to Supabase asynchronously
+    SupabaseService.upsertUser(user).catch((err) => console.warn('Supabase upsertUser background:', err));
+  },
+
+  deleteUser(id: string): void {
+    const current = this.getUsers();
+    const filtered = current.filter((u) => u.id !== id);
+    safeSet(STORAGE_KEYS.USERS, filtered);
+
+    // Push to Supabase asynchronously
+    SupabaseService.deleteUser(id).catch((err) => console.warn('Supabase deleteUser background:', err));
+  },
+
+  login(usuario: string, clave: string): { success: boolean; user?: UserAccount; message?: string } {
+    const cleanUser = usuario.trim().toLowerCase();
+    const cleanPass = clave.trim();
+
+    const users = this.getUsers();
+    const found = users.find(
+      (u) => u.usuario.toLowerCase() === cleanUser && u.clave === cleanPass
+    );
+
+    if (!found) {
+      return {
+        success: false,
+        message: 'Usuario o contraseña incorrectos. Verifica las mayúsculas y caracteres.',
+      };
+    }
+
+    if (!found.activo) {
+      return {
+        success: false,
+        message: 'Tu cuenta de usuario se encuentra temporalmente inactiva. Contacta al Administrador.',
+      };
+    }
+
+    this.setCurrentUser(found);
+    return { success: true, user: found };
+  },
+
+  logout(): void {
+    this.setCurrentUser(null);
   },
 
   // Company Profile
@@ -102,22 +212,20 @@ export const StorageService = {
     const current = this.getQuotations();
     const existingIndex = current.findIndex((q) => q.id === quotation.id);
     let updated: Quotation[];
-    
+
     if (existingIndex >= 0) {
       updated = [...current];
-      updated[existingIndex] = quotation;
+      updated[existingIndex] = { ...quotation, sincronizado: true };
     } else {
-      updated = [quotation, ...current];
+      updated = [{ ...quotation, sincronizado: true }, ...current];
     }
-    
+
     safeSet(STORAGE_KEYS.QUOTATIONS, updated);
 
-    this.addToSyncQueue({
-      action: existingIndex >= 0 ? 'UPDATE' : 'CREATE',
-      entity: 'quotations',
-      data: quotation,
-      timestamp: new Date().toISOString(),
-    });
+    // Push to Supabase asynchronously
+    SupabaseService.upsertQuotation(quotation).catch((err) =>
+      console.warn('Supabase upsertQuotation background:', err)
+    );
   },
 
   deleteQuotation(id: string): void {
@@ -125,12 +233,10 @@ export const StorageService = {
     const filtered = current.filter((q) => q.id !== id);
     safeSet(STORAGE_KEYS.QUOTATIONS, filtered);
 
-    this.addToSyncQueue({
-      action: 'DELETE',
-      entity: 'quotations',
-      data: { id },
-      timestamp: new Date().toISOString(),
-    });
+    // Push to Supabase asynchronously
+    SupabaseService.deleteQuotation(id).catch((err) =>
+      console.warn('Supabase deleteQuotation background:', err)
+    );
   },
 
   // Sale Notes (Notas de Venta)
@@ -149,30 +255,28 @@ export const StorageService = {
 
     if (existingIndex >= 0) {
       updated = [...current];
-      updated[existingIndex] = note;
+      updated[existingIndex] = { ...note, sincronizado: true };
     } else {
-      updated = [note, ...current];
+      updated = [{ ...note, sincronizado: true }, ...current];
     }
 
     safeSet(STORAGE_KEYS.SALE_NOTES, updated);
-    this.addToSyncQueue({
-      action: existingIndex >= 0 ? 'UPDATE' : 'CREATE',
-      entity: 'sale_notes',
-      data: note,
-      timestamp: new Date().toISOString(),
-    });
+
+    // Push to Supabase asynchronously
+    SupabaseService.upsertSaleNote(note).catch((err) =>
+      console.warn('Supabase upsertSaleNote background:', err)
+    );
   },
 
   deleteSaleNote(id: string): void {
     const current = this.getSaleNotes();
     const filtered = current.filter((n) => n.id !== id);
     safeSet(STORAGE_KEYS.SALE_NOTES, filtered);
-    this.addToSyncQueue({
-      action: 'DELETE',
-      entity: 'sale_notes',
-      data: { id },
-      timestamp: new Date().toISOString(),
-    });
+
+    // Push to Supabase asynchronously
+    SupabaseService.deleteSaleNote(id).catch((err) =>
+      console.warn('Supabase deleteSaleNote background:', err)
+    );
   },
 
   // Products
@@ -184,33 +288,31 @@ export const StorageService = {
     const current = this.getProducts();
     const existingIndex = current.findIndex((p) => p.id === product.id);
     let updated: Product[];
-    
+
     if (existingIndex >= 0) {
       updated = [...current];
       updated[existingIndex] = product;
     } else {
       updated = [product, ...current];
     }
-    
+
     safeSet(STORAGE_KEYS.PRODUCTS, updated);
-    this.addToSyncQueue({
-      action: existingIndex >= 0 ? 'UPDATE' : 'CREATE',
-      entity: 'products',
-      data: product,
-      timestamp: new Date().toISOString(),
-    });
+
+    // Push to Supabase asynchronously
+    SupabaseService.upsertProduct(product).catch((err) =>
+      console.warn('Supabase upsertProduct background:', err)
+    );
   },
 
   deleteProduct(id: string): void {
     const current = this.getProducts();
     const filtered = current.filter((p) => p.id !== id);
     safeSet(STORAGE_KEYS.PRODUCTS, filtered);
-    this.addToSyncQueue({
-      action: 'DELETE',
-      entity: 'products',
-      data: { id },
-      timestamp: new Date().toISOString(),
-    });
+
+    // Push to Supabase asynchronously
+    SupabaseService.deleteProduct(id).catch((err) =>
+      console.warn('Supabase deleteProduct background:', err)
+    );
   },
 
   // Clients
@@ -222,50 +324,74 @@ export const StorageService = {
     const current = this.getClients();
     const existingIndex = current.findIndex((c) => c.id === client.id);
     let updated: Client[];
-    
+
     if (existingIndex >= 0) {
       updated = [...current];
       updated[existingIndex] = client;
     } else {
       updated = [client, ...current];
     }
-    
+
     safeSet(STORAGE_KEYS.CLIENTS, updated);
-    this.addToSyncQueue({
-      action: existingIndex >= 0 ? 'UPDATE' : 'CREATE',
-      entity: 'clients',
-      data: client,
-      timestamp: new Date().toISOString(),
-    });
+
+    // Push to Supabase asynchronously
+    SupabaseService.upsertClient(client).catch((err) =>
+      console.warn('Supabase upsertClient background:', err)
+    );
   },
 
   deleteClient(id: string): void {
     const current = this.getClients();
     const filtered = current.filter((c) => c.id !== id);
     safeSet(STORAGE_KEYS.CLIENTS, filtered);
-    this.addToSyncQueue({
-      action: 'DELETE',
-      entity: 'clients',
-      data: { id },
-      timestamp: new Date().toISOString(),
-    });
+
+    // Push to Supabase asynchronously
+    SupabaseService.deleteClient(id).catch((err) =>
+      console.warn('Supabase deleteClient background:', err)
+    );
   },
 
-  // Offline Sync Queue for Supabase future integration
+  // Two-way sync with Supabase
+  async syncWithSupabase(): Promise<{ ok: boolean; message: string }> {
+    try {
+      const [remoteUsers, remoteProducts, remoteClients, remoteQuotations, remoteSaleNotes] =
+        await Promise.allSettled([
+          SupabaseService.getUsers(),
+          SupabaseService.getProducts(),
+          SupabaseService.getClients(),
+          SupabaseService.getQuotations(),
+          SupabaseService.getSaleNotes(),
+        ]);
+
+      if (remoteUsers.status === 'fulfilled' && remoteUsers.value && remoteUsers.value.length > 0) {
+        safeSet(STORAGE_KEYS.USERS, remoteUsers.value);
+      }
+      if (remoteProducts.status === 'fulfilled' && remoteProducts.value && remoteProducts.value.length > 0) {
+        safeSet(STORAGE_KEYS.PRODUCTS, remoteProducts.value);
+      }
+      if (remoteClients.status === 'fulfilled' && remoteClients.value && remoteClients.value.length > 0) {
+        safeSet(STORAGE_KEYS.CLIENTS, remoteClients.value);
+      }
+      if (remoteQuotations.status === 'fulfilled' && remoteQuotations.value && remoteQuotations.value.length > 0) {
+        safeSet(STORAGE_KEYS.QUOTATIONS, remoteQuotations.value);
+      }
+      if (remoteSaleNotes.status === 'fulfilled' && remoteSaleNotes.value && remoteSaleNotes.value.length > 0) {
+        safeSet(STORAGE_KEYS.SALE_NOTES, remoteSaleNotes.value);
+      }
+
+      return { ok: true, message: 'Datos sincronizados con Supabase' };
+    } catch (err: any) {
+      return { ok: false, message: err?.message || 'Error al sincronizar con Supabase' };
+    }
+  },
+
+  // Sync Queue (for offline inspection)
   getSyncQueue(): Array<{ action: string; entity: string; data: any; timestamp: string }> {
     return safeGet(STORAGE_KEYS.SYNC_QUEUE, []);
   },
 
-  addToSyncQueue(item: { action: string; entity: string; data: any; timestamp: string }): void {
-    const queue = this.getSyncQueue();
-    queue.push(item);
-    safeSet(STORAGE_KEYS.SYNC_QUEUE, queue);
-  },
-
   clearSyncQueue(): void {
     safeSet(STORAGE_KEYS.SYNC_QUEUE, []);
-    const quotations = this.getQuotations().map((q) => ({ ...q, sincronizado: true }));
-    safeSet(STORAGE_KEYS.QUOTATIONS, quotations);
   },
 
   // Reset to factory sample data
@@ -274,8 +400,8 @@ export const StorageService = {
     safeSet(STORAGE_KEYS.SALE_NOTES, INITIAL_SALE_NOTES);
     safeSet(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
     safeSet(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
+    safeSet(STORAGE_KEYS.USERS, INITIAL_USERS);
     safeSet(STORAGE_KEYS.PROFILE, INITIAL_COMPANY_PROFILE);
     safeSet(STORAGE_KEYS.SYNC_QUEUE, []);
   },
 };
-
