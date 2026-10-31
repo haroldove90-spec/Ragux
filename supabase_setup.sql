@@ -12,10 +12,18 @@ CREATE TABLE IF NOT EXISTS public.users (
     clave TEXT NOT NULL,
     rol TEXT NOT NULL DEFAULT 'vendedor',
     telefono TEXT,
+    whatsapp TEXT,
+    email TEXT,
+    foto_url TEXT,
     activo BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migración idempotente para tablas ya existentes
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS foto_url TEXT;
 
 -- 2. TABLA: products (Catálogo de Productos)
 CREATE TABLE IF NOT EXISTS public.products (
@@ -156,12 +164,19 @@ CREATE POLICY "Public access company_profile" ON public.company_profile FOR ALL 
 -- ==============================================================================
 
 -- 1. Credenciales de acceso requeridas
-INSERT INTO public.users (id, nombre, usuario, clave, rol, telefono, activo)
+INSERT INTO public.users (id, nombre, usuario, clave, rol, telefono, whatsapp, email, foto_url, activo)
 VALUES 
-    ('usr-admin', 'Administrador ROGUX', 'admin_123', 'Chevropar#1970', 'admin', '4443053182', true),
-    ('usr-harold', 'Harold Anguiano Morales', 'haroldo90', 'Chevropar#1970', 'vendedor', '4443053182', true)
+    ('usr-admin', 'Administrador ROGUX', 'admin_123', 'Chevropar#1970', 'admin', '4443053182', '4443053182', 'admin@raguxdistribuciones.com', '', true),
+    ('usr-harold', 'Harold Anguiano Morales', 'haroldo90', 'Chevropar#1970', 'vendedor', '4443053182', '4443053182', 'haroldanguiano@gmail.com', '', true)
 ON CONFLICT (usuario) DO UPDATE 
-SET nombre = EXCLUDED.nombre, clave = EXCLUDED.clave, rol = EXCLUDED.rol, activo = EXCLUDED.activo;
+SET nombre = EXCLUDED.nombre, 
+    clave = EXCLUDED.clave, 
+    rol = EXCLUDED.rol, 
+    telefono = EXCLUDED.telefono, 
+    whatsapp = EXCLUDED.whatsapp, 
+    email = EXCLUDED.email, 
+    foto_url = COALESCE(NULLIF(EXCLUDED.foto_url, ''), public.users.foto_url),
+    activo = EXCLUDED.activo;
 
 -- 2. Clientes de muestra
 INSERT INTO public.clients (id, nombre, rfc, direccion, ciudad, telefono, email, contacto)

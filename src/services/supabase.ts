@@ -46,6 +46,9 @@ export const SupabaseService = {
         clave: u.clave,
         rol: u.rol,
         telefono: u.telefono || '',
+        whatsapp: u.whatsapp || '',
+        email: u.email || '',
+        fotoUrl: u.foto_url || '',
         activo: u.activo ?? true,
         createdAt: u.created_at,
       }));
@@ -63,6 +66,9 @@ export const SupabaseService = {
         clave: user.clave,
         rol: user.rol,
         telefono: user.telefono || '',
+        whatsapp: user.whatsapp || '',
+        email: user.email || '',
+        foto_url: user.fotoUrl || null,
         activo: user.activo,
         updated_at: new Date().toISOString(),
       });

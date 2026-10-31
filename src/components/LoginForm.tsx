@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Lock, Eye, EyeOff, LogIn, Shield, Database, Sparkles, AlertCircle } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, LogIn, Database, AlertCircle } from 'lucide-react';
 import { StorageService } from '../services/storage';
 import { UserAccount } from '../types';
 
@@ -39,12 +39,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
         setError(result.message || 'Credenciales incorrectas');
       }
     }, 250);
-  };
-
-  const handleQuickFill = (user: string, pass: string) => {
-    setUsuario(user);
-    setClave(pass);
-    setError(null);
   };
 
   return (
@@ -87,7 +81,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
                 autoComplete="username"
                 value={usuario}
                 onChange={(e) => setUsuario(e.target.value)}
-                placeholder="Ej. admin_123 o haroldo90"
+                placeholder="Ingresa tu usuario registrado"
                 className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-300 focus:border-[#66C34E] focus:ring-2 focus:ring-[#66C34E]/20 text-gray-900 text-sm font-medium transition outline-none"
               />
             </div>
@@ -139,46 +133,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
           </button>
         </form>
 
-        {/* Quick access cards for testing & fast entry */}
-        <div className="mt-6 pt-5 border-t border-gray-100">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2.5 text-center">
-            Accesos Rápidos Registrados
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickFill('admin_123', 'Chevropar#1970')}
-              className="flex items-center gap-2.5 p-2.5 rounded-xl border border-gray-200 bg-gray-50/80 hover:bg-emerald-50/70 hover:border-emerald-300 transition text-left cursor-pointer group"
-            >
-              <div className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800 group-hover:bg-[#66C34E] group-hover:text-white transition">
-                <Shield className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-gray-800 leading-tight">Administrador</p>
-                <p className="text-[10px] text-gray-500 font-mono leading-tight truncate">admin_123</p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickFill('haroldo90', 'Chevropar#1970')}
-              className="flex items-center gap-2.5 p-2.5 rounded-xl border border-gray-200 bg-gray-50/80 hover:bg-emerald-50/70 hover:border-emerald-300 transition text-left cursor-pointer group"
-            >
-              <div className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800 group-hover:bg-[#66C34E] group-hover:text-white transition">
-                <User className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-gray-800 leading-tight truncate">Harold Anguiano</p>
-                <p className="text-[10px] text-gray-500 font-mono leading-tight truncate">haroldo90</p>
-              </div>
-            </button>
-          </div>
-        </div>
-
-        {/* Footer info */}
-        <div className="mt-5 text-center flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
-          <Database className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Sincronizado con Supabase Cloud DB</span>
+        {/* Footer info - Conexión Segura */}
+        <div className="mt-6 pt-5 border-t border-gray-100 flex items-center justify-center gap-1.5 text-xs text-gray-500 font-medium">
+          <Database className="w-4 h-4 text-[#66C34E]" />
+          <span>Sistema Privado · Sincronizado en la Nube</span>
         </div>
       </div>
     </div>

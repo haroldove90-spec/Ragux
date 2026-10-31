@@ -8,6 +8,9 @@ export interface UserAccount {
   clave: string;
   rol: UserRole;
   telefono?: string;
+  whatsapp?: string;
+  email?: string;
+  fotoUrl?: string;
   activo: boolean;
   createdAt?: string;
 }

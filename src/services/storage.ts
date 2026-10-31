@@ -111,26 +111,34 @@ export const StorageService = {
 
   saveUser(user: UserAccount): void {
     const current = this.getUsers();
-    const existingIndex = current.findIndex((u) => u.id === user.id || u.usuario.toLowerCase() === user.usuario.toLowerCase());
+    const existingIndex = current.findIndex(
+      (u) => u.id === user.id || u.usuario.toLowerCase() === user.usuario.toLowerCase()
+    );
+    let updatedUser: UserAccount;
     let updated: UserAccount[];
 
     if (existingIndex >= 0) {
+      updatedUser = { ...current[existingIndex], ...user };
       updated = [...current];
-      updated[existingIndex] = { ...current[existingIndex], ...user };
+      updated[existingIndex] = updatedUser;
     } else {
+      updatedUser = user;
       updated = [user, ...current];
     }
 
     safeSet(STORAGE_KEYS.USERS, updated);
 
-    // If currently logged in user is being updated, sync state
+    // If currently logged in user is being updated, sync state in session
     const currentUser = this.getCurrentUser();
-    if (currentUser && currentUser.id === user.id) {
-      this.setCurrentUser(user);
+    if (
+      currentUser &&
+      (currentUser.id === user.id || currentUser.usuario.toLowerCase() === user.usuario.toLowerCase())
+    ) {
+      this.setCurrentUser(updatedUser);
     }
 
     // Push to Supabase asynchronously
-    SupabaseService.upsertUser(user).catch((err) => console.warn('Supabase upsertUser background:', err));
+    SupabaseService.upsertUser(updatedUser).catch((err) => console.warn('Supabase upsertUser background:', err));
   },
 
   deleteUser(id: string): void {

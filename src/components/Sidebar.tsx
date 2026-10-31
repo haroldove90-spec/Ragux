@@ -74,8 +74,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       : []),
     {
       id: 'perfil' as NavTab,
-      label: 'Perfil Fiscal',
-      desc: 'Datos del emisor y app',
+      label: 'Perfil',
+      desc: 'Mi cuenta y datos personales',
       icon: User,
     },
   ];

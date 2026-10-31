@@ -228,6 +228,11 @@ export default function App() {
               {activeTab === 'perfil' && (
                 <ProfileModule
                   profile={profile}
+                  currentUser={currentUser}
+                  onUpdateUser={(updatedUser) => {
+                    setCurrentUser(updatedUser);
+                    refreshAllData();
+                  }}
                   onUpdateProfile={(updated) => setProfile(updated)}
                   onRefreshAllData={refreshAllData}
                 />

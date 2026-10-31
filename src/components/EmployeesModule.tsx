@@ -107,6 +107,7 @@ export const EmployeesModule: React.FC<EmployeesModuleProps> = ({ onRefresh }) =
       return;
     }
 
+    const existing = editingId ? employees.find((e) => e.id === editingId) : null;
     const newAccount: UserAccount = {
       id: editingId || `usr-${Date.now()}`,
       nombre: nombre.trim(),
@@ -114,10 +115,11 @@ export const EmployeesModule: React.FC<EmployeesModuleProps> = ({ onRefresh }) =
       clave: clave.trim(),
       rol,
       telefono: telefono.trim(),
+      whatsapp: telefono.trim(),
+      email: existing?.email || '',
+      fotoUrl: existing?.fotoUrl || '',
       activo,
-      createdAt: editingId
-        ? employees.find((e) => e.id === editingId)?.createdAt || new Date().toISOString()
-        : new Date().toISOString(),
+      createdAt: existing?.createdAt || new Date().toISOString(),
     };
 
     StorageService.saveUser(newAccount);
