@@ -1,15 +1,8 @@
 import React from 'react';
 import { FilePlus, FileText, Package, User, Users, FileCheck } from 'lucide-react';
 
-export type NavTab =
-  | 'nueva_cotizacion'
-  | 'cotizaciones'
-  | 'nueva_nota_venta'
-  | 'notas_venta'
-  | 'productos'
-  | 'clientes'
-  | 'empleados'
-  | 'perfil';
+import { NavTab } from '../types';
+export type { NavTab };
 
 interface BottomNavProps {
   activeTab: NavTab;

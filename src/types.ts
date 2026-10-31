@@ -1,6 +1,16 @@
 export type RoleType = 'admin' | 'vendedor' | 'almacen' | 'empleado';
 export type UserRole = 'admin' | 'vendedor' | 'almacen' | 'empleado';
 
+export type NavTab =
+  | 'nueva_cotizacion'
+  | 'cotizaciones'
+  | 'nueva_nota_venta'
+  | 'notas_venta'
+  | 'productos'
+  | 'clientes'
+  | 'empleados'
+  | 'perfil';
+
 export interface UserAccount {
   id: string;
   nombre: string;

@@ -1,6 +1,7 @@
 import {
   Client,
   CompanyProfile,
+  NavTab,
   Product,
   Quotation,
   RoleType,
@@ -24,43 +25,116 @@ const STORAGE_KEYS = {
   CLIENTS: 'rogux_clients',
   USERS: 'rogux_users',
   CURRENT_USER: 'rogux_current_user',
+  CURRENT_USER_ID: 'rogux_current_user_id',
   PROFILE: 'rogux_company_profile',
   ACTIVE_ROLE: 'rogux_active_role',
+  ACTIVE_TAB: 'rogux_active_tab',
   SYNC_QUEUE: 'rogux_sync_queue',
 };
 
-// Safe JSON parse helper
+// Safe JSON parse helper with localStorage and sessionStorage fallback
 function safeGet<T>(key: string, fallback: T): T {
   try {
     const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : fallback;
+    if (item && item !== 'undefined' && item !== 'null') {
+      return JSON.parse(item);
+    }
   } catch (error) {
     console.warn(`Error reading ${key} from localStorage:`, error);
-    return fallback;
   }
+
+  try {
+    const sessionItem = sessionStorage.getItem(key);
+    if (sessionItem && sessionItem !== 'undefined' && sessionItem !== 'null') {
+      return JSON.parse(sessionItem);
+    }
+  } catch (error) {
+    console.warn(`Error reading ${key} from sessionStorage:`, error);
+  }
+
+  return fallback;
 }
 
 function safeSet<T>(key: string, value: T): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
-    console.error(`Error saving ${key} to localStorage:`, error);
+    console.warn(`Warning saving ${key} to localStorage:`, error);
+  }
+
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.warn(`Warning saving ${key} to sessionStorage:`, error);
   }
 }
 
 export const StorageService = {
-  // Current Authenticated User & Role
+  // Current Authenticated User & Persistent Session
   getCurrentUser(): UserAccount | null {
-    return safeGet<UserAccount | null>(STORAGE_KEYS.CURRENT_USER, null);
+    let user = safeGet<UserAccount | null>(STORAGE_KEYS.CURRENT_USER, null);
+
+    // Resilience fallback: if user object wasn't retrieved, check stored user ID
+    if (!user) {
+      try {
+        const storedId =
+          localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID) ||
+          sessionStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
+        if (storedId) {
+          const users = this.getUsers();
+          const found = users.find(
+            (u) =>
+              u.id === storedId ||
+              u.usuario.toLowerCase() === storedId.toLowerCase()
+          );
+          if (found && found.activo) {
+            user = found;
+            this.setCurrentUser(user);
+          }
+        }
+      } catch (e) {
+        console.warn('Error reading fallback user ID:', e);
+      }
+    }
+
+    // Always keep current session in sync with the registered users list (e.g. photo or name updates)
+    if (user) {
+      const allUsers = this.getUsers();
+      const freshRecord = allUsers.find(
+        (u) =>
+          u.id === user?.id ||
+          u.usuario.toLowerCase() === user?.usuario.toLowerCase()
+      );
+      if (freshRecord) {
+        if (!freshRecord.activo) {
+          this.setCurrentUser(null);
+          return null;
+        }
+        return freshRecord;
+      }
+    }
+
+    return user;
   },
 
   setCurrentUser(user: UserAccount | null): void {
     if (user) {
       safeSet(STORAGE_KEYS.CURRENT_USER, user);
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_ROLE, user.rol);
+      try {
+        localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, user.id);
+        sessionStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, user.id);
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_ROLE, user.rol);
+        sessionStorage.setItem(STORAGE_KEYS.ACTIVE_ROLE, user.rol);
+      } catch {}
     } else {
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-      localStorage.removeItem(STORAGE_KEYS.ACTIVE_ROLE);
+      try {
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+        sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
+        sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
+        localStorage.removeItem(STORAGE_KEYS.ACTIVE_ROLE);
+        sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_ROLE);
+      } catch {}
     }
   },
 
@@ -68,8 +142,15 @@ export const StorageService = {
     try {
       const user = this.getCurrentUser();
       if (user) return user.rol;
-      const role = localStorage.getItem(STORAGE_KEYS.ACTIVE_ROLE);
-      if (role === 'admin' || role === 'vendedor' || role === 'almacen' || role === 'empleado') {
+      const role =
+        localStorage.getItem(STORAGE_KEYS.ACTIVE_ROLE) ||
+        sessionStorage.getItem(STORAGE_KEYS.ACTIVE_ROLE);
+      if (
+        role === 'admin' ||
+        role === 'vendedor' ||
+        role === 'almacen' ||
+        role === 'empleado'
+      ) {
         return role;
       }
       return null;
@@ -80,10 +161,53 @@ export const StorageService = {
 
   setActiveRole(role: RoleType | null): void {
     if (role) {
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_ROLE, role);
+      try {
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_ROLE, role);
+        sessionStorage.setItem(STORAGE_KEYS.ACTIVE_ROLE, role);
+      } catch {}
     } else {
-      localStorage.removeItem(STORAGE_KEYS.ACTIVE_ROLE);
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      this.setCurrentUser(null);
+    }
+  },
+
+  // Active Tab Persistence across page refreshes and browser reloads
+  getActiveTab(): NavTab {
+    const validTabs: NavTab[] = [
+      'nueva_cotizacion',
+      'cotizaciones',
+      'nueva_nota_venta',
+      'notas_venta',
+      'productos',
+      'clientes',
+      'empleados',
+      'perfil',
+    ];
+
+    // 1. Check URL hash first (e.g., #perfil, #cotizaciones)
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hashTab = window.location.hash.replace('#', '') as NavTab;
+      if (validTabs.includes(hashTab)) {
+        return hashTab;
+      }
+    }
+
+    // 2. Check localStorage / sessionStorage
+    const saved = safeGet<NavTab | null>(STORAGE_KEYS.ACTIVE_TAB, null);
+    if (saved && validTabs.includes(saved)) {
+      return saved;
+    }
+
+    return 'nueva_cotizacion';
+  },
+
+  setActiveTab(tab: NavTab): void {
+    safeSet(STORAGE_KEYS.ACTIVE_TAB, tab);
+    if (typeof window !== 'undefined') {
+      try {
+        if (window.location.hash !== `#${tab}`) {
+          window.location.hash = tab;
+        }
+      } catch {}
     }
   },
 
@@ -179,6 +303,14 @@ export const StorageService = {
 
   logout(): void {
     this.setCurrentUser(null);
+    try {
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_TAB);
+      sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_TAB);
+      sessionStorage.removeItem('rogux_splash_shown');
+      if (typeof window !== 'undefined' && window.location.hash) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    } catch {}
   },
 
   // Company Profile

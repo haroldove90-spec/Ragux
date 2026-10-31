@@ -133,16 +133,52 @@ export const ProfileModule: React.FC<ProfileModuleProps> = ({
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('La imagen no debe superar los 5 MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      alert('La imagen no debe superar los 10 MB.');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setPhotoPreview(base64);
-      setUserForm((prev) => ({ ...prev, fotoUrl: base64 }));
+      const rawBase64 = event.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        // Compress and resize to max 256x256 avatar to guarantee fast loading and avoid localStorage quota limits
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 256;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.85);
+          setPhotoPreview(compressed);
+          setUserForm((prev) => ({ ...prev, fotoUrl: compressed }));
+        } else {
+          setPhotoPreview(rawBase64);
+          setUserForm((prev) => ({ ...prev, fotoUrl: rawBase64 }));
+        }
+      };
+      img.onerror = () => {
+        setPhotoPreview(rawBase64);
+        setUserForm((prev) => ({ ...prev, fotoUrl: rawBase64 }));
+      };
+      img.src = rawBase64;
     };
     reader.readAsDataURL(file);
   };

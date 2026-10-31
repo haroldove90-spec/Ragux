@@ -21,14 +21,52 @@ import { EmployeesModule } from './components/EmployeesModule';
 import { ProfileModule } from './components/ProfileModule';
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     return StorageService.getCurrentUser();
   });
   const [activeRole, setActiveRole] = useState<RoleType>(() => {
-    return StorageService.getActiveRole() || 'admin';
+    const user = StorageService.getCurrentUser();
+    return user ? user.rol : StorageService.getActiveRole() || 'admin';
   });
-  const [activeTab, setActiveTab] = useState<NavTab>('nueva_cotizacion');
+  const [activeTab, setActiveTabState] = useState<NavTab>(() => {
+    return StorageService.getActiveTab();
+  });
+
+  // Persistent tab switcher syncing state, localStorage, and URL hash
+  const setActiveTab = (tab: NavTab) => {
+    setActiveTabState(tab);
+    StorageService.setActiveTab(tab);
+  };
+
+  // Only show splash screen if user has not yet seen it in this session and is not logged in
+  const [showSplash, setShowSplash] = useState(() => {
+    const user = StorageService.getCurrentUser();
+    if (user) {
+      return false; // Skip splash on reload if already logged in so user stays seamlessly in their view
+    }
+    try {
+      return sessionStorage.getItem('rogux_splash_shown') !== 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const handleSplashFinish = () => {
+    setShowSplash(false);
+    try {
+      sessionStorage.setItem('rogux_splash_shown', 'true');
+    } catch {}
+  };
+
+  // Listen to browser back/forward and hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const currentTab = StorageService.getActiveTab();
+      setActiveTabState(currentTab);
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Application state loaded from StorageService (offline ready + Supabase sync)
   const [profile, setProfile] = useState<CompanyProfile>(() => StorageService.getProfile());
@@ -62,14 +100,19 @@ export default function App() {
   };
 
   const handleLoginSuccess = (user: UserAccount) => {
+    StorageService.setCurrentUser(user);
     setCurrentUser(user);
     setActiveRole(user.rol);
+    const destinationTab = StorageService.getActiveTab();
+    setActiveTab(destinationTab || 'nueva_cotizacion');
     refreshAllData();
   };
 
   const handleLogout = () => {
     StorageService.logout();
     setCurrentUser(null);
+    setActiveRole('admin');
+    setActiveTabState('nueva_cotizacion');
     setEditingQuotation(null);
     setEditingSaleNote(null);
   };
@@ -137,7 +180,7 @@ export default function App() {
   return (
     <div className="w-full min-h-screen bg-gray-100 text-gray-900 font-sans antialiased flex flex-col">
       {/* 1. Splash Screen on initial load */}
-      {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
+      {showSplash && <SplashScreen onFinish={handleSplashFinish} />}
 
       {/* 2. Login Form (Strictly for system access) */}
       {!currentUser ? (
