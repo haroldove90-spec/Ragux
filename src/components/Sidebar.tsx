@@ -50,20 +50,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       desc: 'Historial y pagarés carta',
       icon: FileText,
     },
-    {
-      id: 'productos' as NavTab,
-      label: 'Productos',
-      desc: 'Catálogo de línea',
-      icon: Package,
-    },
-    {
-      id: 'clientes' as NavTab,
-      label: 'Clientes',
-      desc: 'Directorio y fiscales',
-      icon: Users,
-    },
     ...(activeRole === 'admin'
       ? [
+          {
+            id: 'productos' as NavTab,
+            label: 'Productos',
+            desc: 'Catálogo e inventario',
+            icon: Package,
+          },
+          {
+            id: 'clientes' as NavTab,
+            label: 'Clientes',
+            desc: 'Directorio y fiscales',
+            icon: Users,
+          },
           {
             id: 'empleados' as NavTab,
             label: 'Empleados',

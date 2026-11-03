@@ -19,7 +19,7 @@ import {
 import { CompanyProfile, SaleNote } from '../types';
 import { StorageService } from '../services/storage';
 import { exportSaleNotesToExcel, exportSingleSaleNoteToExcel } from '../utils/excelExporter';
-import { generateSaleNotePDF } from '../utils/saleNotePdfGenerator';
+import { generateSaleNotePDF, formatDateDMY } from '../utils/saleNotePdfGenerator';
 import { SaleNoteDetailModal } from './SaleNoteDetailModal';
 
 interface SaleNotesListProps {
@@ -300,9 +300,9 @@ export const SaleNotesList: React.FC<SaleNotesListProps> = ({
                       </div>
                     </td>
 
-                    {/* Fecha */}
-                    <td className="py-3 px-4 text-gray-600 font-medium whitespace-nowrap">
-                      {note.fechaEmision}
+                    {/* Fecha (Día/Mes/Año) */}
+                    <td className="py-3 px-4 text-gray-700 font-semibold whitespace-nowrap">
+                      {formatDateDMY(note.fechaEmision)}
                     </td>
 
                     {/* Cliente */}
@@ -417,8 +417,8 @@ export const SaleNotesList: React.FC<SaleNotesListProps> = ({
                     </span>
                     {renderStatusBadge(note.estado)}
                   </div>
-                  <span className="text-xs text-gray-500 font-medium">
-                    {note.fechaEmision}
+                  <span className="text-xs text-gray-700 font-bold">
+                    {formatDateDMY(note.fechaEmision)}
                   </span>
                 </div>
 

@@ -34,6 +34,12 @@ export default function App() {
 
   // Persistent tab switcher syncing state, localStorage, and URL hash
   const setActiveTab = (tab: NavTab) => {
+    // Only admin can access productos, clientes, and empleados
+    if (activeRole !== 'admin' && (tab === 'productos' || tab === 'clientes' || tab === 'empleados')) {
+      setActiveTabState('nueva_cotizacion');
+      StorageService.setActiveTab('nueva_cotizacion');
+      return;
+    }
     setActiveTabState(tab);
     StorageService.setActiveTab(tab);
   };
@@ -62,11 +68,22 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const currentTab = StorageService.getActiveTab();
-      setActiveTabState(currentTab);
+      if (activeRole !== 'admin' && (currentTab === 'productos' || currentTab === 'clientes' || currentTab === 'empleados')) {
+        setActiveTab('nueva_cotizacion');
+      } else {
+        setActiveTabState(currentTab);
+      }
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  }, [activeRole]);
+
+  // Ensure non-admin users cannot remain on admin tabs
+  useEffect(() => {
+    if (activeRole !== 'admin' && (activeTab === 'productos' || activeTab === 'clientes' || activeTab === 'empleados')) {
+      setActiveTab('nueva_cotizacion');
+    }
+  }, [activeRole, activeTab]);
 
   // Application state loaded from StorageService (offline ready + Supabase sync)
   const [profile, setProfile] = useState<CompanyProfile>(() => StorageService.getProfile());
@@ -249,14 +266,14 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'productos' && (
+              {activeTab === 'productos' && activeRole === 'admin' && (
                 <ProductsModule
                   products={products}
                   onRefresh={refreshAllData}
                 />
               )}
 
-              {activeTab === 'clientes' && (
+              {activeTab === 'clientes' && activeRole === 'admin' && (
                 <ClientsModule
                   clients={clients}
                   onRefresh={refreshAllData}

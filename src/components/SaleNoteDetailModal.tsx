@@ -13,7 +13,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { CompanyProfile, SaleNote } from '../types';
-import { generateSaleNotePDF } from '../utils/saleNotePdfGenerator';
+import { generateSaleNotePDF, formatDateDMY } from '../utils/saleNotePdfGenerator';
 import { exportSingleSaleNoteToExcel } from '../utils/excelExporter';
 
 interface SaleNoteDetailModalProps {
@@ -130,7 +130,11 @@ export const SaleNoteDetailModal: React.FC<SaleNoteDetailModalProps> = ({
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-gray-100 pb-4">
               <div className="w-20 h-20 shrink-0">
                 <img
-                  src={profile.logoUrl || 'https://appdesignproyectos.com/raguxdistribuciones.jpeg'}
+                  src={
+                    profile.logoUrl && !profile.logoUrl.includes('raguxlogo.png')
+                      ? profile.logoUrl
+                      : 'https://appdesignproyectos.com/raguxdistribuciones.jpeg'
+                  }
                   alt="ROGUX"
                   className="w-full h-full object-contain"
                 />
@@ -157,7 +161,7 @@ export const SaleNoteDetailModal: React.FC<SaleNoteDetailModalProps> = ({
                 </div>
                 <span className="text-[11px] text-gray-500 block mt-1">Fecha de Emisión</span>
                 <span className="text-xs font-bold text-gray-800">
-                  {saleNote.fechaEmision}
+                  {formatDateDMY(saleNote.fechaEmision)}
                 </span>
               </div>
             </div>
@@ -242,7 +246,7 @@ export const SaleNoteDetailModal: React.FC<SaleNoteDetailModalProps> = ({
             <div className="space-y-1 pt-2">
               <span className="font-bold uppercase text-gray-800 text-[11px]">Observaciones:</span>
               <p className="text-[10px] text-gray-600 leading-relaxed bg-gray-50 p-2.5 rounded border border-gray-100">
-                {saleNote.observaciones}
+                {saleNote.observaciones?.replace(/LAMERCANCIA/g, 'LA MERCANCÍA')}
               </p>
             </div>
 

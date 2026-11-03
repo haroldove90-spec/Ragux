@@ -27,18 +27,18 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, is
       label: '+ Cotiz.',
       icon: FilePlus,
     },
-    {
-      id: 'productos' as NavTab,
-      label: 'Catálogo',
-      icon: Package,
-    },
-    {
-      id: 'clientes' as NavTab,
-      label: 'Clientes',
-      icon: Users,
-    },
     ...(isAdmin
       ? [
+          {
+            id: 'productos' as NavTab,
+            label: 'Catálogo',
+            icon: Package,
+          },
+          {
+            id: 'clientes' as NavTab,
+            label: 'Clientes',
+            icon: Users,
+          },
           {
             id: 'empleados' as NavTab,
             label: 'Personal',

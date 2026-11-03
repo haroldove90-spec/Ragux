@@ -3,28 +3,69 @@ import autoTable from 'jspdf-autotable';
 import { CompanyProfile, SaleNote } from '../types';
 
 /**
+ * Format date string to Día / Mes / Año (e.g., 31/10/2026)
+ */
+export function formatDateDMY(dateInput?: string): string {
+  if (!dateInput) return '';
+  const clean = dateInput.trim();
+  // Format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+  const matchYmd = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (matchYmd) {
+    const year = matchYmd[1];
+    const month = matchYmd[2].padStart(2, '0');
+    const day = matchYmd[3].padStart(2, '0');
+    return `${day}/${month}/${year}`;
+  }
+  // Format: DD/MM/YYYY
+  const matchDmy = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (matchDmy) {
+    const day = matchDmy[1].padStart(2, '0');
+    const month = matchDmy[2].padStart(2, '0');
+    const year = matchDmy[3];
+    return `${day}/${month}/${year}`;
+  }
+  return clean;
+}
+
+/**
  * Loads an image from URL into an HTMLImageElement and converts to base64 data URL
  */
 async function loadImageAsBase64(url: string): Promise<string | null> {
+  // 1. Try fetch with blob
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (res.ok) {
+      const blob = await res.blob();
+      return await new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    }
+  } catch {
+    // Continue to Image fallback
+  }
+
+  // 2. Try Image canvas fallback
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
+        canvas.width = img.width || 200;
+        canvas.height = img.height || 200;
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/png'));
-        } else {
-          resolve(null);
+          resolve(canvas.toDataURL('image/jpeg'));
+          return;
         }
       } catch (e) {
-        console.warn('Canvas export failed, using text fallback', e);
-        resolve(null);
+        console.warn('Canvas export failed, using badge fallback', e);
       }
+      resolve(null);
     };
     img.onerror = () => {
       resolve(null);
@@ -57,11 +98,15 @@ export async function generateSaleNotePDF(
     );
   }
 
-  // Load logo
+  // Load logo: User explicitly requested https://appdesignproyectos.com/raguxdistribuciones.jpeg
+  const targetLogoUrl =
+    profile.logoUrl && !profile.logoUrl.includes('raguxlogo.png')
+      ? profile.logoUrl
+      : 'https://appdesignproyectos.com/raguxdistribuciones.jpeg';
+
   let logoBase64: string | null = null;
   try {
-    const targetLogo = profile.logoUrl || 'https://appdesignproyectos.com/raguxdistribuciones.jpeg';
-    logoBase64 = await loadImageAsBase64(targetLogo);
+    logoBase64 = await loadImageAsBase64(targetLogoUrl);
   } catch {
     logoBase64 = null;
   }
@@ -70,7 +115,7 @@ export async function generateSaleNotePDF(
   // Left: Circular Badge Logo (unboxed, rendered faithfully)
   if (logoBase64) {
     try {
-      doc.addImage(logoBase64, 'JPEG', marginX, 8, 28, 28, undefined, 'FAST');
+      doc.addImage(logoBase64, 'JPEG', marginX, 7, 30, 30, undefined, 'FAST');
     } catch {
       drawTextLogoBadge(doc, marginX, 18);
     }
@@ -117,7 +162,7 @@ export async function generateSaleNotePDF(
   doc.setTextColor(215, 25, 25); // Vibrant Red
   doc.text(saleNote.folio, rightX, 19, { align: 'right' });
 
-  // Fecha de Emisión
+  // Fecha de Emisión (Día / Mes / Año, ej: 31/10/2026)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(40, 40, 40);
@@ -126,7 +171,7 @@ export async function generateSaleNotePDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(15, 23, 42);
-  doc.text(formatDateDisplay(saleNote.fechaEmision), rightX, 28, { align: 'right' });
+  doc.text(formatDateDMY(saleNote.fechaEmision), rightX, 28, { align: 'right' });
 
   // --- CLIENT & LUGAR DE EXPEDICIÓN SECTION ---
   const clientStartY = 37;
@@ -286,11 +331,13 @@ export async function generateSaleNotePDF(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(30, 30, 30);
-  const defaultObs =
+  const rawObs =
     saleNote.observaciones ||
-    'ESTIMADO CLIENTE UNA VEZ CHECADA,ENTREGADA,ACEPTADA LAMERCANCIA Y FIRMADA ESTE COMPROBANTE POR NIGUN MOTIVO SE ACEPTAN RECLAMACIONES Y/O DEVOLUCIONES POSTERIORES A LA FECHA DE ENTREGA FAVOR DE REVISAR BIEN SU MERCANCIA. GRACIAS.';
+    'ESTIMADO CLIENTE UNA VEZ CHECADA,ENTREGADA,ACEPTADA LA MERCANCÍA Y FIRMADA ESTE COMPROBANTE POR NIGUN MOTIVO SE ACEPTAN RECLAMACIONES Y/O DEVOLUCIONES POSTERIORES A LA FECHA DE ENTREGA FAVOR DE REVISAR BIEN SU MERCANCIA. GRACIAS.';
+  // Ensure LAMERCANCIA typo is strictly replaced with LA MERCANCÍA
+  const cleanObs = rawObs.replace(/LAMERCANCIA/g, 'LA MERCANCÍA');
   
-  const splitObs = doc.splitTextToSize(defaultObs, contentWidth);
+  const splitObs = doc.splitTextToSize(cleanObs, contentWidth);
   doc.text(splitObs, marginX, obsY + 4);
 
   // --- PAGARÉ AND SIGNATURE SECTION ---
@@ -330,14 +377,22 @@ export async function generateSaleNotePDF(
 }
 
 function drawTextLogoBadge(doc: jsPDF, x: number, y: number) {
+  // Circular green badge replica
+  doc.setFillColor(102, 195, 78); // #66C34E
+  doc.circle(x + 10, y - 4, 10, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(34, 197, 94);
-  doc.text('ROGUX', x, y);
+  doc.setFontSize(14);
+  doc.setTextColor(255, 255, 255);
+  doc.text('R', x + 10, y - 0.5, { align: 'center' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(20, 20, 20);
+  doc.text('RAGUX', x + 24, y - 5);
   doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(50, 50, 50);
-  doc.text('Distribuciones', x, y + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(102, 195, 78);
+  doc.text('DISTRIBUCIONES', x + 24, y);
 }
 
 function formatCurrency(val: number): string {
@@ -345,13 +400,4 @@ function formatCurrency(val: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-function formatDateDisplay(dateStr: string): string {
-  if (!dateStr) return '';
-  const parts = dateStr.split('-');
-  if (parts.length === 3) {
-    return `${parts[2]}/${parts[1]}/${parts[0]}`;
-  }
-  return dateStr;
 }

@@ -315,7 +315,12 @@ export const StorageService = {
 
   // Company Profile
   getProfile(): CompanyProfile {
-    return safeGet<CompanyProfile>(STORAGE_KEYS.PROFILE, INITIAL_COMPANY_PROFILE);
+    const prof = safeGet<CompanyProfile>(STORAGE_KEYS.PROFILE, INITIAL_COMPANY_PROFILE);
+    if (!prof.logoUrl || prof.logoUrl.includes('raguxlogo.png')) {
+      prof.logoUrl = 'https://appdesignproyectos.com/raguxdistribuciones.jpeg';
+      safeSet(STORAGE_KEYS.PROFILE, prof);
+    }
+    return prof;
   },
 
   updateProfile(profile: Partial<CompanyProfile>): CompanyProfile {
@@ -348,9 +353,95 @@ export const StorageService = {
     return this.getQuotations().find((q) => q.id === id);
   },
 
+  // Automatic stock discount from quotations (el inventario se descuenta automáticamente)
+  adjustProductStockFromQuotation(
+    newQuotation: Quotation,
+    previousQuotation: Quotation | null
+  ): void {
+    const allProducts = this.getProducts();
+    let hasChanges = false;
+    const modifiedProducts: Product[] = [];
+
+    // Helper to find matching product by ID, code, or description
+    const findProductIndex = (productId?: string, codigo?: string, descripcion?: string): number => {
+      if (productId) {
+        const idx = allProducts.findIndex((p) => p.id === productId);
+        if (idx >= 0) return idx;
+      }
+      if (codigo && codigo.trim()) {
+        const cleanCode = codigo.trim().toLowerCase();
+        const idx = allProducts.findIndex(
+          (p) => p.codigo && p.codigo.trim().toLowerCase() === cleanCode
+        );
+        if (idx >= 0) return idx;
+      }
+      if (descripcion && descripcion.trim()) {
+        const cleanDesc = descripcion.trim().toLowerCase();
+        const idx = allProducts.findIndex(
+          (p) => p.descripcion && p.descripcion.trim().toLowerCase() === cleanDesc
+        );
+        if (idx >= 0) return idx;
+      }
+      return -1;
+    };
+
+    // 1. If modifying an existing quotation, restore previously discounted stock first
+    if (previousQuotation && Array.isArray(previousQuotation.items)) {
+      for (const oldItem of previousQuotation.items) {
+        const qty = Number(oldItem.cantidad) || 0;
+        if (qty <= 0) continue;
+        const pIdx = findProductIndex(oldItem.productId, oldItem.codigo, oldItem.descripcion);
+        if (pIdx >= 0) {
+          const currentStock = Number(allProducts[pIdx].stock ?? 0);
+          const restoredStock = Math.round((currentStock + qty) * 100) / 100;
+          allProducts[pIdx] = {
+            ...allProducts[pIdx],
+            stock: restoredStock,
+          };
+          hasChanges = true;
+          if (!modifiedProducts.some((p) => p.id === allProducts[pIdx].id)) {
+            modifiedProducts.push(allProducts[pIdx]);
+          }
+        }
+      }
+    }
+
+    // 2. Discount stock for line items in the new/current quotation
+    if (newQuotation && Array.isArray(newQuotation.items)) {
+      for (const newItem of newQuotation.items) {
+        const qty = Number(newItem.cantidad) || 0;
+        if (qty <= 0) continue;
+        const pIdx = findProductIndex(newItem.productId, newItem.codigo, newItem.descripcion);
+        if (pIdx >= 0) {
+          const currentStock = Number(allProducts[pIdx].stock ?? 0);
+          const discountedStock = Math.max(0, Math.round((currentStock - qty) * 100) / 100);
+          allProducts[pIdx] = {
+            ...allProducts[pIdx],
+            stock: discountedStock,
+          };
+          hasChanges = true;
+          if (!modifiedProducts.some((p) => p.id === allProducts[pIdx].id)) {
+            modifiedProducts.push(allProducts[pIdx]);
+          }
+        }
+      }
+    }
+
+    // 3. Save updated products to localStorage and sync to Supabase
+    if (hasChanges) {
+      safeSet(STORAGE_KEYS.PRODUCTS, allProducts);
+      modifiedProducts.forEach((prod) => {
+        SupabaseService.upsertProduct(prod).catch((err) =>
+          console.warn('Supabase upsertProduct stock sync background:', err)
+        );
+      });
+    }
+  },
+
   saveQuotation(quotation: Quotation): void {
     const current = this.getQuotations();
     const existingIndex = current.findIndex((q) => q.id === quotation.id);
+    const previousQuotation = existingIndex >= 0 ? current[existingIndex] : null;
     let updated: Quotation[];
 
     if (existingIndex >= 0) {
@@ -362,6 +453,9 @@ export const StorageService = {
 
     safeSet(STORAGE_KEYS.QUOTATIONS, updated);
 
+    // Automatic inventory deduction from quotation items
+    this.adjustProductStockFromQuotation(quotation, previousQuotation);
+
     // Push to Supabase asynchronously
     SupabaseService.upsertQuotation(quotation).catch((err) =>
       console.warn('Supabase upsertQuotation background:', err)
@@ -370,8 +464,14 @@ export const StorageService = {
 
   deleteQuotation(id: string): void {
     const current = this.getQuotations();
+    const target = current.find((q) => q.id === id);
     const filtered = current.filter((q) => q.id !== id);
     safeSet(STORAGE_KEYS.QUOTATIONS, filtered);
+
+    // Restore inventory when quotation is deleted
+    if (target) {
+      this.adjustProductStockFromQuotation({ ...target, items: [] }, target);
+    }
 
     // Push to Supabase asynchronously
     SupabaseService.deleteQuotation(id).catch((err) =>

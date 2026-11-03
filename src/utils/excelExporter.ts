@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { Client, Product, Quotation, SaleNote } from '../types';
+import { formatDateDMY } from './saleNotePdfGenerator';
 
 /**
  * Utility to download generated XLSX workbook in the browser
@@ -19,7 +20,7 @@ export function exportSaleNotesToExcel(notes: SaleNote[], filename = 'Notas_de_V
   // Sheet 1: Summary
   const summaryRows = notes.map((note) => ({
     'Folio': note.folio,
-    'Fecha Emisión': note.fechaEmision,
+    'Fecha Emisión': formatDateDMY(note.fechaEmision),
     'Lugar Expedición': note.lugarExpedicion,
     'Cliente': note.clienteNombre,
     'RFC Cliente': note.clienteRfc || 'N/A',
@@ -31,7 +32,7 @@ export function exportSaleNotesToExcel(notes: SaleNote[], filename = 'Notas_de_V
     'Total ($)': note.total,
     'Importe con Letra': note.totalLetra,
     'Estado': note.estado.toUpperCase(),
-    'Observaciones': note.observaciones || '',
+    'Observaciones': (note.observaciones || '').replace(/LAMERCANCIA/g, 'LA MERCANCÍA'),
   }));
 
   const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
@@ -100,7 +101,7 @@ export function exportSingleSaleNoteToExcel(note: SaleNote) {
   // Header info rows
   const headerData = [
     ['RAGUX DISTRIBUCIONES - NOTA DE VENTA'],
-    ['FOLIO:', note.folio, '', 'FECHA DE EMISIÓN:', note.fechaEmision],
+    ['FOLIO:', note.folio, '', 'FECHA DE EMISIÓN:', formatDateDMY(note.fechaEmision)],
     ['LUGAR DE EXPEDICIÓN:', note.lugarExpedicion],
     ['EMISOR:', note.emisorNombre || 'RAGUX DISTRIBUCIONES', '', 'TEL:', note.emisorTelefono || ''],
     ['DIRECCIÓN EMISOR:', `${note.emisorDireccion || ''} ${note.emisorColoniaCp || ''}`],
@@ -132,7 +133,7 @@ export function exportSingleSaleNoteToExcel(note: SaleNote) {
     ['', '', '', 'TOTAL:', '', note.total],
     ['IMPORTE CON LETRA:', note.totalLetra],
     [],
-    ['OBSERVACIONES:', note.observaciones || ''],
+    ['OBSERVACIONES:', (note.observaciones || '').replace(/LAMERCANCIA/g, 'LA MERCANCÍA')],
     ['PAGARÉ:', `En ${note.lugarExpedicion} Debe(mos) y pagare(mos) incondicionalmente por este Pagaré a la orden de (RAGUXDISTRIBUCIONES) la cantidad de $${note.total.toFixed(2)} M.N.`],
     ['FIRMA:', '_______________________ Recibí de conformidad'],
   ];

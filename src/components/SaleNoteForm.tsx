@@ -16,7 +16,7 @@ import {
 import { Client, CompanyProfile, Product, SaleNote, SaleNoteItem } from '../types';
 import { StorageService } from '../services/storage';
 import { numeroALetras } from '../utils/numberToWords';
-import { generateSaleNotePDF, MAX_SALE_NOTE_ITEMS } from '../utils/saleNotePdfGenerator';
+import { generateSaleNotePDF, MAX_SALE_NOTE_ITEMS, formatDateDMY } from '../utils/saleNotePdfGenerator';
 import { exportSingleSaleNoteToExcel } from '../utils/excelExporter';
 import { SmartProductSearchModal } from './SmartProductSearchModal';
 import { SmartClientSearchModal } from './SmartClientSearchModal';
@@ -98,10 +98,10 @@ export const SaleNoteForm: React.FC<SaleNoteFormProps> = ({
 
   // Observations & Status
   const [observaciones, setObservaciones] = useState<string>(() => {
-    return (
+    const raw =
       initialSaleNote?.observaciones ||
-      'ESTIMADO CLIENTE UNA VEZ CHECADA,ENTREGADA,ACEPTADA LAMERCANCIA Y FIRMADA ESTE COMPROBANTE POR NIGUN MOTIVO SE ACEPTAN RECLAMACIONES Y/O DEVOLUCIONES POSTERIORES A LA FECHA DE ENTREGA FAVOR DE REVISAR BIEN SU MERCANCIA. GRACIAS.'
-    );
+      'ESTIMADO CLIENTE UNA VEZ CHECADA,ENTREGADA,ACEPTADA LA MERCANCÍA Y FIRMADA ESTE COMPROBANTE POR NIGUN MOTIVO SE ACEPTAN RECLAMACIONES Y/O DEVOLUCIONES POSTERIORES A LA FECHA DE ENTREGA FAVOR DE REVISAR BIEN SU MERCANCIA. GRACIAS.';
+    return raw.replace(/LAMERCANCIA/g, 'LA MERCANCÍA');
   });
   const [estado, setEstado] = useState<'pagada' | 'pendiente' | 'cancelada'>(
     initialSaleNote?.estado || 'pagada'
@@ -368,7 +368,7 @@ export const SaleNoteForm: React.FC<SaleNoteFormProps> = ({
         },
       ]);
       setObservaciones(
-        'ESTIMADO CLIENTE UNA VEZ CHECADA,ENTREGADA,ACEPTADA LAMERCANCIA Y FIRMADA ESTE COMPROBANTE POR NIGUN MOTIVO SE ACEPTAN RECLAMACIONES Y/O DEVOLUCIONES POSTERIORES A LA FECHA DE ENTREGA FAVOR DE REVISAR BIEN SU MERCANCIA. GRACIAS.'
+        'ESTIMADO CLIENTE UNA VEZ CHECADA,ENTREGADA,ACEPTADA LA MERCANCÍA Y FIRMADA ESTE COMPROBANTE POR NIGUN MOTIVO SE ACEPTAN RECLAMACIONES Y/O DEVOLUCIONES POSTERIORES A LA FECHA DE ENTREGA FAVOR DE REVISAR BIEN SU MERCANCIA. GRACIAS.'
       );
     }
   };
@@ -498,7 +498,11 @@ export const SaleNoteForm: React.FC<SaleNoteFormProps> = ({
             {/* Left: Emisor logo and info */}
             <div className="lg:col-span-8 flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <img
-                src={profile.logoUrl || 'https://appdesignproyectos.com/raguxdistribuciones.jpeg'}
+                src={
+                  profile.logoUrl && !profile.logoUrl.includes('raguxlogo.png')
+                    ? profile.logoUrl
+                    : 'https://appdesignproyectos.com/raguxdistribuciones.jpeg'
+                }
                 alt="ROGUX Distribuciones"
                 className="w-16 h-16 sm:w-20 sm:h-20 object-contain rounded-full shadow-xs shrink-0"
               />
@@ -529,15 +533,20 @@ export const SaleNoteForm: React.FC<SaleNoteFormProps> = ({
 
               <div className="grid grid-cols-2 gap-2 pt-1 border-t border-gray-100 text-xs">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase">
-                    Fecha Emisión
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase">
+                      Fecha Emisión
+                    </label>
+                  </div>
                   <input
                     type="date"
                     value={fechaEmision}
                     onChange={(e) => setFechaEmision(e.target.value)}
                     className="w-full font-semibold text-gray-900 bg-transparent border-b border-gray-300 focus:border-[#66C34E] outline-none text-xs py-0.5"
                   />
+                  <span className="text-[10px] text-emerald-700 font-bold block mt-0.5">
+                    {formatDateDMY(fechaEmision)}
+                  </span>
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase">
