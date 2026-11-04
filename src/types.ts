@@ -1,5 +1,5 @@
-export type RoleType = 'admin' | 'vendedor' | 'almacen' | 'empleado';
-export type UserRole = 'admin' | 'vendedor' | 'almacen' | 'empleado';
+export type RoleType = 'admin' | 'vendedor' | 'logistica' | 'almacen' | 'empleado';
+export type UserRole = 'admin' | 'vendedor' | 'logistica' | 'almacen' | 'empleado';
 
 export type NavTab =
   | 'nueva_cotizacion'

@@ -13,6 +13,7 @@ import {
   Clock,
   Loader2,
   FileSpreadsheet,
+  Edit,
 } from 'lucide-react';
 import { CompanyProfile, Quotation } from '../types';
 import { StorageService } from '../services/storage';
@@ -315,6 +316,16 @@ export const QuotationsList: React.FC<QuotationsListProps> = ({
                     </button>
 
                     <button
+                      onClick={() => onEditQuotation(q)}
+                      type="button"
+                      className="flex items-center gap-1 px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+                      title="Modificar cotización guardada"
+                    >
+                      <Edit className="w-4 h-4 text-emerald-400" />
+                      <span className="hidden sm:inline">Editar</span>
+                    </button>
+
+                    <button
                       onClick={() => handleDuplicate(q)}
                       type="button"
                       className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition active:scale-95 cursor-pointer"
@@ -345,6 +356,7 @@ export const QuotationsList: React.FC<QuotationsListProps> = ({
           quotation={selectedQuotation}
           profile={profile}
           onClose={() => setSelectedQuotation(null)}
+          onEdit={onEditQuotation}
         />
       )}
     </div>

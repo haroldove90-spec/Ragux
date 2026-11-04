@@ -26,18 +26,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
 }) => {
   const menuItems = [
-    {
-      id: 'nueva_cotizacion' as NavTab,
-      label: 'Nueva Cotización',
-      desc: 'Crear formato comercial',
-      icon: FilePlus,
-    },
-    {
-      id: 'cotizaciones' as NavTab,
-      label: 'Cotizaciones',
-      desc: 'Historial y exportación',
-      icon: FileText,
-    },
+    // Cotizaciones: accesibles para Admin y Logística (oculto para Ventas)
+    ...((activeRole === 'admin' || activeRole === 'logistica')
+      ? [
+          {
+            id: 'nueva_cotizacion' as NavTab,
+            label: 'Nueva Cotización',
+            desc: 'Crear formato comercial',
+            icon: FilePlus,
+          },
+          {
+            id: 'cotizaciones' as NavTab,
+            label: 'Cotizaciones',
+            desc: 'Historial y modificación',
+            icon: FileText,
+          },
+        ]
+      : []),
     {
       id: 'nueva_nota_venta' as NavTab,
       label: 'Nueva Nota de Venta',

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Printer, X, Check, Loader2, FileSpreadsheet } from 'lucide-react';
+import { Download, Printer, X, Check, Loader2, FileSpreadsheet, Edit } from 'lucide-react';
 import { CompanyProfile, Quotation } from '../types';
 import { generateQuotationPDF } from '../utils/pdfGenerator';
 import { exportSingleQuotationToExcel } from '../utils/excelExporter';
@@ -8,12 +8,14 @@ interface QuotationDetailModalProps {
   quotation: Quotation | null;
   profile: CompanyProfile;
   onClose: () => void;
+  onEdit?: (quotation: Quotation) => void;
 }
 
 export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
   quotation,
   profile,
   onClose,
+  onEdit,
 }) => {
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -77,6 +79,21 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                 </>
               )}
             </button>
+
+            {onEdit && (
+              <button
+                onClick={() => {
+                  onEdit(quotation);
+                  onClose();
+                }}
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition active:scale-95 cursor-pointer border border-slate-700"
+                title="Modificar cotización guardada"
+              >
+                <Edit className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Editar</span>
+              </button>
+            )}
 
             <button
               onClick={() => exportSingleQuotationToExcel(quotation)}

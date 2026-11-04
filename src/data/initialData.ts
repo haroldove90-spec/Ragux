@@ -38,10 +38,22 @@ export const APP_ROLES: RoleInfo[] = [
     badgeColor: '#66C34E',
   },
   {
+    id: 'logistica',
+    name: 'Logística',
+    description: 'Acceso a cotizaciones, notas de venta y modificación de cotizaciones guardadas.',
+    badgeColor: '#3B82F6',
+  },
+  {
     id: 'vendedor',
     name: 'Ventas',
-    description: 'Generación de cotizaciones y notas de venta en ruta.',
+    description: 'Generación y consulta de notas de venta y comprobantes pagaré.',
     badgeColor: '#10B981',
+  },
+  {
+    id: 'almacen',
+    name: 'Almacén',
+    description: 'Gestión y comprobantes de almacén.',
+    badgeColor: '#F59E0B',
   },
 ];
 

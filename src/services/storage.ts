@@ -148,6 +148,7 @@ export const StorageService = {
       if (
         role === 'admin' ||
         role === 'vendedor' ||
+        role === 'logistica' ||
         role === 'almacen' ||
         role === 'empleado'
       ) {

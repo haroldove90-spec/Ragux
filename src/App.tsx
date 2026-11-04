@@ -34,12 +34,27 @@ export default function App() {
 
   // Persistent tab switcher syncing state, localStorage, and URL hash
   const setActiveTab = (tab: NavTab) => {
-    // Only admin can access productos, clientes, and empleados
-    if (activeRole !== 'admin' && (tab === 'productos' || tab === 'clientes' || tab === 'empleados')) {
-      setActiveTabState('nueva_cotizacion');
-      StorageService.setActiveTab('nueva_cotizacion');
-      return;
+    // Role permissions validation
+    if (activeRole === 'vendedor') {
+      if (tab !== 'nueva_nota_venta' && tab !== 'notas_venta' && tab !== 'perfil') {
+        setActiveTabState('nueva_nota_venta');
+        StorageService.setActiveTab('nueva_nota_venta');
+        return;
+      }
+    } else if (activeRole === 'logistica') {
+      if (tab === 'productos' || tab === 'clientes' || tab === 'empleados') {
+        setActiveTabState('cotizaciones');
+        StorageService.setActiveTab('cotizaciones');
+        return;
+      }
+    } else if (activeRole !== 'admin') {
+      if (tab === 'productos' || tab === 'clientes' || tab === 'empleados') {
+        setActiveTabState('nueva_nota_venta');
+        StorageService.setActiveTab('nueva_nota_venta');
+        return;
+      }
     }
+
     setActiveTabState(tab);
     StorageService.setActiveTab(tab);
   };
@@ -68,8 +83,12 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const currentTab = StorageService.getActiveTab();
-      if (activeRole !== 'admin' && (currentTab === 'productos' || currentTab === 'clientes' || currentTab === 'empleados')) {
-        setActiveTab('nueva_cotizacion');
+      if (activeRole === 'vendedor' && currentTab !== 'nueva_nota_venta' && currentTab !== 'notas_venta' && currentTab !== 'perfil') {
+        setActiveTab('nueva_nota_venta');
+      } else if (activeRole === 'logistica' && (currentTab === 'productos' || currentTab === 'clientes' || currentTab === 'empleados')) {
+        setActiveTab('cotizaciones');
+      } else if (activeRole !== 'admin' && (currentTab === 'productos' || currentTab === 'clientes' || currentTab === 'empleados')) {
+        setActiveTab('nueva_nota_venta');
       } else {
         setActiveTabState(currentTab);
       }
@@ -78,12 +97,35 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [activeRole]);
 
-  // Ensure non-admin users cannot remain on admin tabs
+  // Ensure role permissions are enforced whenever activeRole or activeTab changes
   useEffect(() => {
-    if (activeRole !== 'admin' && (activeTab === 'productos' || activeTab === 'clientes' || activeTab === 'empleados')) {
-      setActiveTab('nueva_cotizacion');
+    if (activeRole === 'vendedor') {
+      if (activeTab !== 'nueva_nota_venta' && activeTab !== 'notas_venta' && activeTab !== 'perfil') {
+        setActiveTab('nueva_nota_venta');
+      }
+    } else if (activeRole === 'logistica') {
+      if (activeTab === 'productos' || activeTab === 'clientes' || activeTab === 'empleados') {
+        setActiveTab('cotizaciones');
+      }
+    } else if (activeRole !== 'admin') {
+      if (activeTab === 'productos' || activeTab === 'clientes' || activeTab === 'empleados') {
+        setActiveTab('nueva_nota_venta');
+      }
     }
   }, [activeRole, activeTab]);
+
+  // Admin role switching without logging out
+  const handleSwitchRole = (newRole: RoleType) => {
+    setActiveRole(newRole);
+    StorageService.setActiveRole(newRole);
+    if (newRole === 'vendedor') {
+      setActiveTab('nueva_nota_venta');
+    } else if (newRole === 'logistica') {
+      setActiveTab('cotizaciones');
+    } else if (newRole === 'admin') {
+      setActiveTab('cotizaciones');
+    }
+  };
 
   // Application state loaded from StorageService (offline ready + Supabase sync)
   const [profile, setProfile] = useState<CompanyProfile>(() => StorageService.getProfile());
@@ -210,7 +252,27 @@ export default function App() {
             activeRole={activeRole}
             currentUser={currentUser}
             onLogout={handleLogout}
+            onSwitchRole={handleSwitchRole}
           />
+
+          {/* Banner de simulación de rol cuando el Administrador navega como otro rol */}
+          {currentUser?.rol === 'admin' && activeRole !== 'admin' && (
+            <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-emerald-700 text-white px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs shadow-md shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                <span>
+                  Modo de simulación activo: Visualizando el sistema como <strong>{activeRole.toUpperCase()}</strong> (sin cerrar sesión de Admin).
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSwitchRole('admin')}
+                className="px-3 py-1 bg-white text-blue-900 rounded-lg font-black hover:bg-blue-50 transition active:scale-95 shadow-xs cursor-pointer text-xs"
+              >
+                ← Volver a Vista Administrador Completo
+              </button>
+            </div>
+          )}
 
           {/* Body with Desktop Sidebar + Main Content */}
           <div className="flex-1 flex w-full">
@@ -305,6 +367,7 @@ export default function App() {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             isAdmin={activeRole === 'admin'}
+            activeRole={activeRole}
           />
         </div>
       )}

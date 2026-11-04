@@ -163,11 +163,12 @@ CREATE POLICY "Public access company_profile" ON public.company_profile FOR ALL 
 -- INSERCIÓN DE DATOS DE MUESTRA Y CREDENCIALES SOLICITADAS
 -- ==============================================================================
 
--- 1. Credenciales de acceso requeridas
+-- 1. Credenciales de acceso requeridas y roles del sistema
 INSERT INTO public.users (id, nombre, usuario, clave, rol, telefono, whatsapp, email, foto_url, activo)
 VALUES 
     ('usr-admin', 'Administrador ROGUX', 'admin_123', 'Chevropar#1970', 'admin', '4443053182', '4443053182', 'admin@raguxdistribuciones.com', '', true),
-    ('usr-harold', 'Harold Anguiano Morales', 'haroldo90', 'Chevropar#1970', 'vendedor', '4443053182', '4443053182', 'haroldanguiano@gmail.com', '', true)
+    ('usr-harold', 'Harold Anguiano Morales', 'haroldo90', 'Chevropar#1970', 'vendedor', '4443053182', '4443053182', 'haroldanguiano@gmail.com', '', true),
+    ('usr-logistica', 'Encargado de Logística', 'logistica_1', 'Chevropar#1970', 'logistica', '4443053182', '4443053182', 'logistica@raguxdistribuciones.com', '', true)
 ON CONFLICT (usuario) DO UPDATE 
 SET nombre = EXCLUDED.nombre, 
     clave = EXCLUDED.clave, 
@@ -348,7 +349,7 @@ VALUES (
     0.00,
     2085.73,
     'DOS MIL OCHENTA Y CINCO PESOS 73/100 M.N.',
-    'ESTIMADO CLIENTE UNA VEZ CHECADA,ENTREGADA,ACEPTADA LAMERCANCIA Y FIRMADA ESTE COMPROBANTE POR NIGUN MOTIVO SE ACEPTAN RECLAMACIONES Y/O DEVOLUCIONES POSTERIORES A LA FECHA DE ENTREGA FAVOR DE REVISAR BIEN SU MERCANCIA. GRACIAS.',
+    'ESTIMADO CLIENTE UNA VEZ CHECADA,ENTREGADA,ACEPTADA LA MERCANCÍA Y FIRMADA ESTE COMPROBANTE POR NIGUN MOTIVO SE ACEPTAN RECLAMACIONES Y/O DEVOLUCIONES POSTERIORES A LA FECHA DE ENTREGA FAVOR DE REVISAR BIEN SU MERCANCIA. GRACIAS.',
     'pendiente'
 )
 ON CONFLICT (id) DO NOTHING;

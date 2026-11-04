@@ -139,8 +139,10 @@ export const EmployeesModule: React.FC<EmployeesModuleProps> = ({ onRefresh }) =
     const roleTitle =
       emp.rol === 'admin'
         ? 'Administrador'
+        : emp.rol === 'logistica'
+        ? 'Logística (Cotizaciones y Notas)'
         : emp.rol === 'vendedor'
-        ? 'Ventas / Cotizador'
+        ? 'Ventas (Notas de Venta)'
         : emp.rol === 'almacen'
         ? 'Almacén'
         : 'Empleado';
@@ -296,10 +298,18 @@ Te comparto tus credenciales de acceso para el sistema *ROGUX Distribuciones*:
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
                           emp.rol === 'admin'
                             ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                            : emp.rol === 'logistica'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
                             : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                         }`}
                       >
-                        {emp.rol === 'admin' ? 'Administrador' : emp.rol === 'vendedor' ? 'Ventas' : emp.rol}
+                        {emp.rol === 'admin'
+                          ? 'Administrador'
+                          : emp.rol === 'logistica'
+                          ? 'Logística'
+                          : emp.rol === 'vendedor'
+                          ? 'Ventas'
+                          : emp.rol}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-gray-600 font-mono text-xs">
@@ -438,12 +448,13 @@ Te comparto tus credenciales de acceso para el sistema *ROGUX Distribuciones*:
                   <select
                     value={rol}
                     onChange={(e) => setRol(e.target.value as UserRole)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:border-[#66C34E] focus:ring-2 focus:ring-[#66C34E]/20 text-sm outline-none bg-white"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:border-[#66C34E] focus:ring-2 focus:ring-[#66C34E]/20 text-sm outline-none bg-white font-medium"
                   >
-                    <option value="vendedor">Ventas (Cotizador en ruta)</option>
-                    <option value="almacen">Almacén (Inventario)</option>
-                    <option value="admin">Administrador (Total)</option>
-                    <option value="empleado">Empleado General</option>
+                    <option value="logistica">🚚 Logística (Cotizaciones, Modificar y Notas)</option>
+                    <option value="vendedor">💼 Ventas (Solo Notas de Venta y Pagarés)</option>
+                    <option value="admin">🛡️ Administrador (Control Total del Sistema)</option>
+                    <option value="almacen">📦 Almacén (Inventario)</option>
+                    <option value="empleado">👤 Empleado General</option>
                   </select>
                 </div>
               </div>

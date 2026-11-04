@@ -12,11 +12,23 @@ interface HeaderProps {
   onSwitchRole?: (role: RoleType) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ activeRole, currentUser, onLogout }) => {
+export const Header: React.FC<HeaderProps> = ({
+  activeRole,
+  currentUser,
+  onLogout,
+  onSwitchRole,
+}) => {
   const isOnline = useOnlineStatus();
   const currentRoleInfo = APP_ROLES.find((r) => r.id === activeRole) || {
     id: activeRole,
-    name: activeRole === 'admin' ? 'Admin' : activeRole === 'vendedor' ? 'Ventas' : activeRole,
+    name:
+      activeRole === 'admin'
+        ? 'Admin'
+        : activeRole === 'logistica'
+        ? 'Logística'
+        : activeRole === 'vendedor'
+        ? 'Ventas'
+        : activeRole,
     description: '',
     badgeColor: '#66C34E',
   };
@@ -36,13 +48,33 @@ export const Header: React.FC<HeaderProps> = ({ activeRole, currentUser, onLogou
               Distribuciones
             </span>
             <span className="text-[10px] text-gray-500 font-medium leading-tight">
-              Sistema de Cotizaciones
+              Sistema de Cotizaciones y Notas
             </span>
           </div>
         </div>
 
-        {/* Right: Identificación del rol activo, Offline status, Botón de instalación y Botón de cierre de sesión */}
+        {/* Right: Identificación del rol activo, Selector de roles para Admin, Offline status, PWA e Logout */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Selector de navegación entre roles (Solo visible para Administrador) */}
+          {currentUser?.rol === 'admin' && onSwitchRole && (
+            <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-emerald-50 border border-emerald-300 rounded-lg text-xs font-semibold shadow-2xs">
+              <span className="text-[10px] text-emerald-800 uppercase tracking-wider font-bold hidden sm:inline">
+                Rol activo:
+              </span>
+              <select
+                value={activeRole}
+                onChange={(e) => onSwitchRole(e.target.value as RoleType)}
+                className="bg-transparent text-xs font-black text-emerald-900 outline-none cursor-pointer py-0.5"
+                title="Cambiar rol activo para navegar sin cerrar sesión"
+              >
+                <option value="admin">🛡️ Admin (Total)</option>
+                <option value="logistica">🚚 Logística (Cotiz. + Notas)</option>
+                <option value="vendedor">💼 Ventas (Solo Notas)</option>
+                <option value="almacen">📦 Almacén</option>
+              </select>
+            </div>
+          )}
+
           {/* Online / Offline status indicator */}
           <div
             className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium ${
@@ -65,8 +97,8 @@ export const Header: React.FC<HeaderProps> = ({ activeRole, currentUser, onLogou
             )}
           </div>
 
-          {/* Identificación del usuario y rol activo */}
-          <div className="flex items-center gap-2 px-2.5 py-1 bg-gray-100 rounded-lg border border-gray-200 text-xs font-semibold text-gray-800">
+          {/* Identificación del usuario */}
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-gray-100 rounded-lg border border-gray-200 text-xs font-semibold text-gray-800">
             {currentUser ? (
               <>
                 {currentUser.fotoUrl ? (
@@ -78,10 +110,7 @@ export const Header: React.FC<HeaderProps> = ({ activeRole, currentUser, onLogou
                 ) : (
                   <UserIcon className="w-3.5 h-3.5 text-[#66C34E] shrink-0" />
                 )}
-                <span className="max-w-[120px] sm:max-w-[180px] truncate">{currentUser.nombre}</span>
-                <span className="text-[10px] bg-white border border-gray-200 px-1 py-0.2 rounded text-emerald-700 capitalize font-bold">
-                  {currentRoleInfo.name}
-                </span>
+                <span className="max-w-[120px] sm:max-w-[160px] truncate">{currentUser.nombre}</span>
               </>
             ) : (
               <>

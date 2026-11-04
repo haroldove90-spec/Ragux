@@ -1,32 +1,57 @@
 import React from 'react';
 import { FilePlus, FileText, Package, User, Users, FileCheck } from 'lucide-react';
 
-import { NavTab } from '../types';
+import { NavTab, RoleType } from '../types';
 export type { NavTab };
 
 interface BottomNavProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
   isAdmin?: boolean;
+  activeRole?: RoleType;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, isAdmin }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({
+  activeTab,
+  onTabChange,
+  isAdmin,
+  activeRole = 'admin',
+}) => {
+  const isVendedor = activeRole === 'vendedor';
+  const isLogistica = activeRole === 'logistica';
+
   const navItems = [
-    {
-      id: 'cotizaciones' as NavTab,
-      label: 'Cotiz.',
-      icon: FileText,
-    },
+    // Cotizaciones visible solo para Admin y Logística
+    ...(!isVendedor
+      ? [
+          {
+            id: 'cotizaciones' as NavTab,
+            label: 'Cotiz.',
+            icon: FileText,
+          },
+        ]
+      : []),
     {
       id: 'notas_venta' as NavTab,
       label: 'Notas',
       icon: FileCheck,
     },
-    {
-      id: 'nueva_cotizacion' as NavTab,
-      label: '+ Cotiz.',
-      icon: FilePlus,
-    },
+    // Botón crear nota (para ventas) o crear cotización (para admin/logistica)
+    ...(isVendedor
+      ? [
+          {
+            id: 'nueva_nota_venta' as NavTab,
+            label: '+ Nota',
+            icon: FilePlus,
+          },
+        ]
+      : [
+          {
+            id: 'nueva_cotizacion' as NavTab,
+            label: '+ Cotiz.',
+            icon: FilePlus,
+          },
+        ]),
     ...(isAdmin
       ? [
           {
