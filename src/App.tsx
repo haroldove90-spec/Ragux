@@ -138,16 +138,21 @@ export default function App() {
   const [editingQuotation, setEditingQuotation] = useState<Quotation | null>(null);
   const [editingSaleNote, setEditingSaleNote] = useState<SaleNote | null>(null);
 
-  // Initial Supabase cloud sync in background
+  // Initial and reactive Supabase cloud sync
+  const handleManualSync = async () => {
+    try {
+      const res = await StorageService.syncWithSupabase();
+      refreshAllData();
+      return res;
+    } catch (e) {
+      console.warn('Sync error:', e);
+      return { ok: false, message: 'Error de sincronización' };
+    }
+  };
+
   useEffect(() => {
-    StorageService.syncWithSupabase()
-      .then((res) => {
-        if (res.ok) {
-          refreshAllData();
-        }
-      })
-      .catch((err) => console.log('Supabase background sync skipped/pending tables:', err));
-  }, []);
+    handleManualSync();
+  }, [activeTab]);
 
   // Reload all data from storage
   const refreshAllData = () => {
@@ -332,6 +337,7 @@ export default function App() {
                 <ProductsModule
                   products={products}
                   onRefresh={refreshAllData}
+                  onSyncCloud={handleManualSync}
                 />
               )}
 
@@ -340,6 +346,7 @@ export default function App() {
                   clients={clients}
                   onRefresh={refreshAllData}
                   onSelectForQuotation={handleSelectClientForQuotation}
+                  onSyncCloud={handleManualSync}
                 />
               )}
 

@@ -522,14 +522,7 @@ export const StorageService = {
 
   // Products
   getProducts(): Product[] {
-    const list = safeGet<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-    // If list only contains legacy sample products (starting with 'prod-0' or 'prod-1', 'prod-2', 'prod-3'), clear them
-    const hasOnlySampleProducts = list.length > 0 && list.every((p) => p.id.startsWith('prod-'));
-    if (hasOnlySampleProducts && !localStorage.getItem('rogux_user_imported_products')) {
-      safeSet(STORAGE_KEYS.PRODUCTS, []);
-      return [];
-    }
-    return list;
+    return safeGet<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
   },
 
   saveProduct(product: Product): void {
@@ -550,7 +543,6 @@ export const StorageService = {
     }
 
     safeSet(STORAGE_KEYS.PRODUCTS, updated);
-    localStorage.setItem('rogux_user_imported_products', 'true');
 
     // Push to Supabase asynchronously
     SupabaseService.upsertProduct(productToSave).catch((err) =>
@@ -584,12 +576,67 @@ export const StorageService = {
 
     const combined = Array.from(map.values());
     safeSet(STORAGE_KEYS.PRODUCTS, combined);
-    localStorage.setItem('rogux_user_imported_products', 'true');
 
     // Push to Supabase in batch
     SupabaseService.upsertProductsBatch(newProducts).catch((err) =>
       console.warn('Supabase upsertProductsBatch background:', err)
     );
+  },
+
+  /**
+   * Import products with explicit duplicate resolution (Reemplazar u Omitir)
+   */
+  importProductsWithResolution(
+    newProducts: Product[],
+    duplicatesToReplace: { incoming: Product; existingId: string }[]
+  ): { added: number; replaced: number } {
+    const current = this.getProducts();
+    const productMap = new Map<string, Product>();
+
+    // Index all existing products by ID
+    current.forEach((p) => productMap.set(p.id, p));
+
+    // 1. Replace duplicates chosen by user (preserving their existing ID)
+    let replacedCount = 0;
+    const toUpsertRemote: Product[] = [];
+
+    duplicatesToReplace.forEach(({ incoming, existingId }) => {
+      const existing = productMap.get(existingId);
+      const updated: Product = {
+        ...incoming,
+        id: existingId,
+        activo: incoming.activo !== undefined ? incoming.activo : existing?.activo ?? true,
+      };
+      productMap.set(existingId, updated);
+      toUpsertRemote.push(updated);
+      replacedCount++;
+    });
+
+    // 2. Add brand new products
+    let addedCount = 0;
+    newProducts.forEach((p) => {
+      const newId = p.id || `prod-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+      const prod: Product = {
+        ...p,
+        id: newId,
+        activo: p.activo !== undefined ? p.activo : true,
+      };
+      productMap.set(newId, prod);
+      toUpsertRemote.push(prod);
+      addedCount++;
+    });
+
+    const finalProducts = Array.from(productMap.values());
+    safeSet(STORAGE_KEYS.PRODUCTS, finalProducts);
+
+    // Push all new and replaced products to Supabase in batch
+    if (toUpsertRemote.length > 0) {
+      SupabaseService.upsertProductsBatch(toUpsertRemote).catch((err) =>
+        console.warn('Supabase batch sync resolution error:', err)
+      );
+    }
+
+    return { added: addedCount, replaced: replacedCount };
   },
 
   toggleProductActive(id: string): void {
@@ -642,14 +689,7 @@ export const StorageService = {
 
   // Clients
   getClients(): Client[] {
-    const list = safeGet<Client[]>(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
-    // If list only contains legacy sample clients (cli-001, cli-002, etc.), clear them
-    const hasOnlySampleClients = list.length > 0 && list.every((c) => c.id.startsWith('cli-00'));
-    if (hasOnlySampleClients && !localStorage.getItem('rogux_user_imported_clients')) {
-      safeSet(STORAGE_KEYS.CLIENTS, []);
-      return [];
-    }
-    return list;
+    return safeGet<Client[]>(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
   },
 
   saveClient(client: Client): void {
@@ -670,7 +710,6 @@ export const StorageService = {
     }
 
     safeSet(STORAGE_KEYS.CLIENTS, updated);
-    localStorage.setItem('rogux_user_imported_clients', 'true');
 
     // Push to Supabase asynchronously
     SupabaseService.upsertClient(clientToSave).catch((err) =>
@@ -703,12 +742,63 @@ export const StorageService = {
 
     const combined = Array.from(map.values());
     safeSet(STORAGE_KEYS.CLIENTS, combined);
-    localStorage.setItem('rogux_user_imported_clients', 'true');
 
     // Push to Supabase in batch
     SupabaseService.upsertClientsBatch(newClients).catch((err) =>
       console.warn('Supabase upsertClientsBatch background:', err)
     );
+  },
+
+  /**
+   * Import clients with explicit duplicate resolution (Reemplazar u Omitir)
+   */
+  importClientsWithResolution(
+    newClients: Client[],
+    duplicatesToReplace: { incoming: Client; existingId: string }[]
+  ): { added: number; replaced: number } {
+    const current = this.getClients();
+    const clientMap = new Map<string, Client>();
+
+    current.forEach((c) => clientMap.set(c.id, c));
+
+    let replacedCount = 0;
+    const toUpsertRemote: Client[] = [];
+
+    duplicatesToReplace.forEach(({ incoming, existingId }) => {
+      const existing = clientMap.get(existingId);
+      const updated: Client = {
+        ...incoming,
+        id: existingId,
+        activo: incoming.activo !== undefined ? incoming.activo : existing?.activo ?? true,
+      };
+      clientMap.set(existingId, updated);
+      toUpsertRemote.push(updated);
+      replacedCount++;
+    });
+
+    let addedCount = 0;
+    newClients.forEach((c) => {
+      const newId = c.id || `cli-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+      const client: Client = {
+        ...c,
+        id: newId,
+        activo: c.activo !== undefined ? c.activo : true,
+      };
+      clientMap.set(newId, client);
+      toUpsertRemote.push(client);
+      addedCount++;
+    });
+
+    const finalClients = Array.from(clientMap.values());
+    safeSet(STORAGE_KEYS.CLIENTS, finalClients);
+
+    if (toUpsertRemote.length > 0) {
+      SupabaseService.upsertClientsBatch(toUpsertRemote).catch((err) =>
+        console.warn('Supabase batch clients sync resolution error:', err)
+      );
+    }
+
+    return { added: addedCount, replaced: replacedCount };
   },
 
   toggleClientActive(id: string): void {

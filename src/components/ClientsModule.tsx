@@ -23,6 +23,9 @@ import {
   Square,
   AlertTriangle,
   Info,
+  Cloud,
+  RefreshCw,
+  Check,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Client } from '../types';
@@ -36,6 +39,13 @@ interface ClientsModuleProps {
   clients: Client[];
   onRefresh: () => void;
   onSelectForQuotation?: (client: Client) => void;
+  onSyncCloud?: () => Promise<any>;
+}
+
+interface DuplicateClientItem {
+  incoming: Client;
+  existing: Client;
+  action: 'replace' | 'skip';
 }
 
 const ITEMS_PER_PAGE = 10;
@@ -44,18 +54,24 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
   clients,
   onRefresh,
   onSelectForQuotation,
+  onSyncCloud,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'activos' | 'inactivos'>('todos');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Modals
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [viewingClient, setViewingClient] = useState<Client | null>(null);
-  const [showImportPreview, setShowImportPreview] = useState(false);
-  const [importedPreviewData, setImportedPreviewData] = useState<Client[]>([]);
+
+  // Duplicate Resolution & Import State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [newClientsList, setNewClientsList] = useState<Client[]>([]);
+  const [duplicateClientsList, setDuplicateClientsList] = useState<DuplicateClientItem[]>([]);
+  const [activeImportTab, setActiveImportTab] = useState<'duplicados' | 'nuevos'>('duplicados');
 
   // Form inputs matching ley_yout_clientes
   const [formNo, setFormNo] = useState('');
@@ -72,13 +88,31 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
   const [formEmail, setFormEmail] = useState('');
   const [formActivo, setFormActivo] = useState(true);
 
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const clientFileInputId = useId();
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotification({ type, message });
-    setTimeout(() => setNotification(null), 3500);
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  // Sync with Supabase on demand
+  const handleCloudSync = async () => {
+    setIsSyncing(true);
+    try {
+      if (onSyncCloud) {
+        await onSyncCloud();
+      } else {
+        await StorageService.syncWithSupabase();
+      }
+      onRefresh();
+      showToast('Clientes sincronizados exitosamente con Supabase', 'success');
+    } catch {
+      showToast('Error al sincronizar con Supabase', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Smart Search & Filtering
@@ -265,7 +299,7 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
     );
   };
 
-  // File Import Logic (.xlsx, .xls, .csv)
+  // File Import Logic (.xlsx, .xls, .csv) with DUPLICATE DETECTION
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -340,12 +374,44 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
           .filter(Boolean) as Client[];
 
         if (parsed.length === 0) {
-          showToast('No se identificaron clientes con nombres válidos', 'error');
+          showToast('No se identificaron clientes válidos en el archivo', 'error');
           return;
         }
 
-        setImportedPreviewData(parsed);
-        setShowImportPreview(true);
+        // Duplicate Detection against current directory
+        const existingClients = StorageService.getClients();
+        const duplicates: DuplicateClientItem[] = [];
+        const newItems: Client[] = [];
+
+        parsed.forEach((incoming) => {
+          const match = existingClients.find((c) => {
+            const sameRfc =
+              c.rfc &&
+              incoming.rfc &&
+              c.rfc.trim().length > 4 &&
+              c.rfc.trim().toUpperCase() === incoming.rfc.trim().toUpperCase();
+            const sameName =
+              c.nombre &&
+              incoming.nombre &&
+              c.nombre.trim().toUpperCase() === incoming.nombre.trim().toUpperCase();
+            return sameRfc || sameName;
+          });
+
+          if (match) {
+            duplicates.push({
+              incoming,
+              existing: match,
+              action: 'replace',
+            });
+          } else {
+            newItems.push(incoming);
+          }
+        });
+
+        setNewClientsList(newItems);
+        setDuplicateClientsList(duplicates);
+        setActiveImportTab(duplicates.length > 0 ? 'duplicados' : 'nuevos');
+        setShowImportModal(true);
       } catch (err: any) {
         console.error('Error importando archivo:', err);
         showToast('Error al leer el archivo. Verifica el formato Excel o CSV.', 'error');
@@ -356,14 +422,39 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
     reader.readAsBinaryString(file);
   };
 
-  const handleConfirmImport = () => {
-    if (importedPreviewData.length === 0) return;
-    StorageService.saveClientsBatch(importedPreviewData);
-    setShowImportPreview(false);
-    setImportedPreviewData([]);
+  // Bulk set action for all duplicate clients
+  const handleSetAllDuplicatesAction = (action: 'replace' | 'skip') => {
+    setDuplicateClientsList((prev) =>
+      prev.map((item) => ({ ...item, action }))
+    );
+  };
+
+  // Confirm Import with Duplicate Resolution
+  const handleConfirmImportWithResolution = () => {
+    const duplicatesToReplace = duplicateClientsList
+      .filter((d) => d.action === 'replace')
+      .map((d) => ({
+        incoming: d.incoming,
+        existingId: d.existing.id,
+      }));
+
+    const skippedCount = duplicateClientsList.filter((d) => d.action === 'skip').length;
+
+    const result = StorageService.importClientsWithResolution(
+      newClientsList,
+      duplicatesToReplace
+    );
+
+    setShowImportModal(false);
+    setNewClientsList([]);
+    setDuplicateClientsList([]);
     onRefresh();
+
     showToast(
-      `¡Se importaron ${importedPreviewData.length} clientes correctamente a tu base de datos!`
+      `¡Importación exitosa! ${result.added} nuevos clientes agregados, ${result.replaced} reemplazados${
+        skippedCount > 0 ? `, ${skippedCount} omitidos` : ''
+      }.`,
+      'success'
     );
   };
 
@@ -388,14 +479,26 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
               <Users className="w-6 h-6 text-[#66C34E]" />
             </div>
             <div>
-              <h2 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-                Directorio de Clientes
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-black text-gray-900 tracking-tight">
+                  Directorio de Clientes
+                </h2>
                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                   {clients.length} registrados
                 </span>
-              </h2>
-              <p className="text-xs text-gray-500">
-                Estructura oficial del layout de clientes. Importa, exporta, gestiona datos fiscales y domiciliares.
+                <button
+                  type="button"
+                  onClick={handleCloudSync}
+                  disabled={isSyncing}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition cursor-pointer"
+                  title="Sincronizar directorio de clientes con Supabase en la nube"
+                >
+                  <Cloud className={`w-3 h-3 ${isSyncing ? 'animate-pulse text-blue-500' : 'text-blue-600'}`} />
+                  <span>{isSyncing ? 'Sincronizando...' : 'Nube Supabase'}</span>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Estructura oficial del layout ley_yout_clientes con detección inteligente de duplicados (Reemplazar u Omitir).
               </p>
             </div>
           </div>
@@ -454,6 +557,8 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
           className={`p-4 rounded-xl border flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 ${
             notification.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : notification.type === 'info'
+              ? 'bg-blue-50 border-blue-200 text-blue-900'
               : 'bg-red-50 border-red-200 text-red-900'
           }`}
         >
@@ -466,6 +571,30 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
             className="text-gray-400 hover:text-gray-700"
           >
             <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Zero Clients Cloud Restore Prompt if Supabase has data */}
+      {clients.length === 0 && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-blue-950">
+          <div className="flex items-center gap-2.5">
+            <Cloud className="w-5 h-5 text-blue-600 shrink-0" />
+            <div>
+              <span className="font-bold">¿Tienes clientes guardados en Supabase?</span>
+              <p className="text-blue-700 text-[11px]">
+                Haz clic en sincronizar para cargarlos inmediatamente a tu pantalla.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCloudSync}
+            disabled={isSyncing}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-xs transition"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Cargando de Supabase...' : 'Recargar desde Supabase'}</span>
           </button>
         </div>
       )}
@@ -616,15 +745,23 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
                       <div className="text-base font-bold text-gray-800">
                         {searchTerm
                           ? 'No hay clientes que coincidan con la búsqueda'
-                          : 'No hay clientes registrados en la base de datos'}
+                          : 'No hay clientes registrados en el directorio local'}
                       </div>
                       <p className="text-xs text-gray-500">
                         {searchTerm
                           ? 'Intenta con otro término o limpia el buscador inteligente.'
-                          : 'Importa tu archivo Excel con la estructura ley_yout_clientes o registra a tu primer cliente.'}
+                          : 'Sincroniza con Supabase o importa tu archivo Excel con la estructura ley_yout_clientes.'}
                       </p>
                       {!searchTerm && (
-                        <div className="pt-2 flex items-center justify-center gap-3">
+                        <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
+                          <button
+                            onClick={handleCloudSync}
+                            type="button"
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                          >
+                            <Cloud className="w-4 h-4" />
+                            <span>Cargar desde Supabase</span>
+                          </button>
                           <button
                             onClick={() => fileInputRef.current?.click()}
                             type="button"
@@ -1190,21 +1327,28 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
         </div>
       )}
 
-      {/* Modal Import Preview */}
-      {showImportPreview && (
+      {/* Modal Import with SMART DUPLICATE RESOLUTION (Reemplazar u Omitir) */}
+      {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl p-6 max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl p-6 max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95">
+            {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-gray-200">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-base font-bold text-gray-900">
-                  Vista Previa de Importación de Clientes ({importedPreviewData.length})
-                </h3>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">
+                    Importación de Clientes con Detección de Duplicados
+                  </h3>
+                  <span className="text-xs text-gray-500">
+                    Total en archivo: {newClientsList.length + duplicateClientsList.length} clientes
+                  </span>
+                </div>
               </div>
               <button
                 onClick={() => {
-                  setShowImportPreview(false);
-                  setImportedPreviewData([]);
+                  setShowImportModal(false);
+                  setNewClientsList([]);
+                  setDuplicateClientsList([]);
                 }}
                 className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
               >
@@ -1212,61 +1356,209 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
               </button>
             </div>
 
-            <div className="p-3 my-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-start gap-2 text-xs text-emerald-900">
-              <Info className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>
-                Se detectaron <strong>{importedPreviewData.length} registros</strong> válidos listos para ser incorporados al sistema y sincronizados con Supabase.
-              </span>
-            </div>
-
-            <div className="overflow-y-auto flex-1 border border-gray-200 rounded-xl">
-              <table className="w-full border-collapse text-left text-xs">
-                <thead>
-                  <tr className="bg-gray-100 font-bold uppercase text-[10px] text-gray-700 sticky top-0">
-                    <th className="p-2 w-10 text-center">No.</th>
-                    <th className="p-2">Nombre</th>
-                    <th className="p-2">RFC</th>
-                    <th className="p-2">Domicilio</th>
-                    <th className="p-2">Ciudad</th>
-                    <th className="p-2">Teléfono</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {importedPreviewData.slice(0, 15).map((row, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="p-2 text-center font-mono text-[11px] text-gray-600">
-                        {row.no || idx + 1}
-                      </td>
-                      <td className="p-2 font-bold text-gray-900 uppercase">
-                        {row.nombre}
-                      </td>
-                      <td className="p-2 font-mono text-[11px]">{row.rfc || 'S/RFC'}</td>
-                      <td className="p-2 text-gray-600 truncate max-w-xs uppercase">
-                        {row.direccion || row.calle || '—'}
-                      </td>
-                      <td className="p-2 text-gray-600 uppercase">{row.ciudad || '—'}</td>
-                      <td className="p-2 text-gray-800">{row.telefono || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {importedPreviewData.length > 15 && (
-                <div className="p-2 text-center text-xs text-gray-500 bg-gray-50 font-medium">
-                  ... y {importedPreviewData.length - 15} clientes más
+            {/* Duplicate Notice Banner */}
+            {duplicateClientsList.length > 0 ? (
+              <div className="p-4 my-3 bg-amber-50 rounded-xl border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-sm block">
+                      ¡Se detectaron {duplicateClientsList.length} cliente(s) duplicado(s)!
+                    </span>
+                    <p className="text-amber-800 text-[11px] mt-0.5">
+                      Coinciden en RFC o Nombre con registros ya existentes. ¿Deseas <strong>Reemplazarlos</strong> con los nuevos datos del Excel u <strong>Omitirlos</strong> para conservar los existentes?
+                    </p>
+                  </div>
                 </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => handleSetAllDuplicatesAction('replace')}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] transition"
+                  >
+                    Reemplazar Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetAllDuplicatesAction('skip')}
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-[11px] transition"
+                  >
+                    Omitir Todos
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 my-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center gap-2 text-xs text-emerald-900">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  No se detectaron duplicados. Se agregarán <strong>{newClientsList.length} nuevos clientes</strong> al directorio.
+                </span>
+              </div>
+            )}
+
+            {/* Tabs (Duplicados vs Nuevos) */}
+            <div className="flex items-center gap-2 border-b border-gray-200 mb-3 text-xs">
+              {duplicateClientsList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActiveImportTab('duplicados')}
+                  className={`pb-2.5 px-3 font-bold border-b-2 transition ${
+                    activeImportTab === 'duplicados'
+                      ? 'border-amber-500 text-amber-700'
+                      : 'border-transparent text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  Duplicados Detectados ({duplicateClientsList.length})
+                </button>
               )}
+              <button
+                type="button"
+                onClick={() => setActiveImportTab('nuevos')}
+                className={`pb-2.5 px-3 font-bold border-b-2 transition ${
+                  activeImportTab === 'nuevos'
+                    ? 'border-emerald-500 text-emerald-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Clientes Nuevos ({newClientsList.length})
+              </button>
             </div>
 
-            <div className="pt-4 mt-3 border-t border-gray-200 flex items-center justify-between">
-              <span className="text-xs text-gray-500">
-                Los clientes existentes con el mismo RFC se actualizarán automáticamente.
-              </span>
+            {/* Tab 1: DUPLICATES RESOLUTION TABLE */}
+            {activeImportTab === 'duplicados' && duplicateClientsList.length > 0 && (
+              <div className="overflow-y-auto flex-1 border border-gray-200 rounded-xl">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="bg-gray-100 font-bold uppercase text-[10px] text-gray-700 sticky top-0 border-b border-gray-200">
+                      <th className="p-2.5 w-28">RFC</th>
+                      <th className="p-2.5">Datos Actuales en el Sistema</th>
+                      <th className="p-2.5">Nuevos Datos en el Archivo Excel</th>
+                      <th className="p-2.5 w-44 text-center">Decisión</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {duplicateClientsList.map((item, idx) => {
+                      const isReplacing = item.action === 'replace';
+                      return (
+                        <tr key={idx} className={isReplacing ? 'bg-emerald-50/30' : 'bg-gray-50/60 opacity-80'}>
+                          <td className="p-2.5 font-mono font-bold text-gray-900 align-top">
+                            {item.incoming.rfc || 'S/RFC'}
+                          </td>
+                          <td className="p-2.5 align-top">
+                            <div className="font-semibold text-gray-800">{item.existing.nombre}</div>
+                            <div className="text-[11px] text-gray-500 mt-0.5">
+                              {item.existing.direccion || item.existing.calle || 'Sin dirección'} | Tel: {item.existing.telefono || '—'}
+                            </div>
+                          </td>
+                          <td className="p-2.5 align-top">
+                            <div className="font-semibold text-emerald-900">{item.incoming.nombre}</div>
+                            <div className="text-[11px] text-emerald-700 mt-0.5">
+                              {item.incoming.direccion || item.incoming.calle || 'Sin dirección'} | Tel: {item.incoming.telefono || '—'}
+                            </div>
+                          </td>
+                          <td className="p-2.5 text-center align-middle">
+                            <div className="inline-flex rounded-lg border border-gray-300 p-0.5 bg-white shadow-xs">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...duplicateClientsList];
+                                  updated[idx].action = 'replace';
+                                  setDuplicateClientsList(updated);
+                                }}
+                                className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
+                                  isReplacing
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'text-gray-600 hover:text-black'
+                                }`}
+                              >
+                                Reemplazar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...duplicateClientsList];
+                                  updated[idx].action = 'skip';
+                                  setDuplicateClientsList(updated);
+                                }}
+                                className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
+                                  !isReplacing
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'text-gray-600 hover:text-black'
+                                }`}
+                              >
+                                Omitir
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Tab 2: NEW CLIENTS TABLE */}
+            {activeImportTab === 'nuevos' && (
+              <div className="overflow-y-auto flex-1 border border-gray-200 rounded-xl">
+                {newClientsList.length === 0 ? (
+                  <div className="p-8 text-center text-gray-400">
+                    Todos los clientes en el archivo ya existían en el directorio (fueron detectados como duplicados).
+                  </div>
+                ) : (
+                  <table className="w-full border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="bg-gray-100 font-bold uppercase text-[10px] text-gray-700 sticky top-0 border-b border-gray-200">
+                        <th className="p-2 w-10 text-center">No.</th>
+                        <th className="p-2">Nombre</th>
+                        <th className="p-2">RFC</th>
+                        <th className="p-2">Domicilio</th>
+                        <th className="p-2">Ciudad</th>
+                        <th className="p-2">Teléfono</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {newClientsList.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="p-2 text-center font-mono text-[11px] text-gray-600">
+                            {row.no || idx + 1}
+                          </td>
+                          <td className="p-2 font-bold text-gray-900 uppercase">
+                            {row.nombre}
+                          </td>
+                          <td className="p-2 font-mono text-[11px]">{row.rfc || 'S/RFC'}</td>
+                          <td className="p-2 text-gray-600 truncate max-w-xs uppercase">
+                            {row.direccion || row.calle || '—'}
+                          </td>
+                          <td className="p-2 text-gray-600 uppercase">{row.ciudad || '—'}</td>
+                          <td className="p-2 text-gray-800">{row.telefono || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {/* Footer Summary & Action */}
+            <div className="pt-4 mt-3 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="text-gray-600">
+                Resumen de importación:{' '}
+                <strong className="text-emerald-700">{newClientsList.length} nuevos</strong> +{' '}
+                <strong className="text-blue-700">
+                  {duplicateClientsList.filter((d) => d.action === 'replace').length} a reemplazar
+                </strong>{' '}
+                ({duplicateClientsList.filter((d) => d.action === 'skip').length} a omitir)
+              </div>
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setShowImportPreview(false);
-                    setImportedPreviewData([]);
+                    setShowImportModal(false);
+                    setNewClientsList([]);
+                    setDuplicateClientsList([]);
                   }}
                   className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100"
                 >
@@ -1274,10 +1566,11 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={handleConfirmImport}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+                  onClick={handleConfirmImportWithResolution}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
-                  Confirmar e Importar {importedPreviewData.length} Clientes
+                  <Check className="w-4 h-4" />
+                  <span>Confirmar Importación</span>
                 </button>
               </div>
             </div>
