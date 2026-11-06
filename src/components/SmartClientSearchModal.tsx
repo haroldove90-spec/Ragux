@@ -34,10 +34,10 @@ export const SmartClientSearchModal: React.FC<SmartClientSearchModalProps> = ({
 
     return clients.filter((c) => {
       const matchName = c.nombre.toLowerCase().includes(term);
-      const matchRfc = c.rfc.toLowerCase().includes(term);
-      const matchCity = c.ciudad.toLowerCase().includes(term);
-      const matchAddress = c.direccion.toLowerCase().includes(term);
-      const matchPhone = c.telefono.toLowerCase().includes(term);
+      const matchRfc = (c.rfc || '').toLowerCase().includes(term);
+      const matchCity = (c.ciudad || '').toLowerCase().includes(term);
+      const matchAddress = (c.direccion || c.calle || '').toLowerCase().includes(term);
+      const matchPhone = (c.telefono || '').toLowerCase().includes(term);
       return matchName || matchRfc || matchCity || matchAddress || matchPhone;
     });
   }, [clients, searchTerm]);

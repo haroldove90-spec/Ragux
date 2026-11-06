@@ -96,10 +96,12 @@ export const SupabaseService = {
         id: p.id,
         codigo: p.codigo,
         descripcion: p.descripcion,
-        unidadMedida: p.unidad_medida || 'H87',
+        unidadMedida: p.unidad_medida || 'PIEZAS',
         precioUnitario: Number(p.precio_unitario) || 0,
         categoria: p.categoria || '',
         stock: p.stock !== undefined ? Number(p.stock) : undefined,
+        activo: p.activo ?? true,
+        createdAt: p.created_at,
       }));
     } catch {
       return null;
@@ -116,8 +118,31 @@ export const SupabaseService = {
         precio_unitario: product.precioUnitario,
         categoria: product.categoria || '',
         stock: product.stock ?? 0,
+        activo: product.activo ?? true,
         updated_at: new Date().toISOString(),
       });
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async upsertProductsBatch(products: Product[]): Promise<boolean> {
+    try {
+      if (!products || products.length === 0) return true;
+      const rows = products.map((product) => ({
+        id: product.id || `prod-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        codigo: product.codigo,
+        descripcion: product.descripcion,
+        unidad_medida: product.unidadMedida || 'PIEZAS',
+        precio_unitario: product.precioUnitario || 0,
+        categoria: product.categoria || '',
+        stock: product.stock ?? 0,
+        activo: product.activo ?? true,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase.from('products').upsert(rows);
       return !error;
     } catch {
       return false;
@@ -133,6 +158,16 @@ export const SupabaseService = {
     }
   },
 
+  async deleteMultipleProducts(ids: string[]): Promise<boolean> {
+    try {
+      if (!ids || ids.length === 0) return true;
+      const { error } = await supabase.from('products').delete().in('id', ids);
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
   // CLIENTS
   async getClients(): Promise<Client[] | null> {
     try {
@@ -140,13 +175,22 @@ export const SupabaseService = {
       if (error || !data) return null;
       return data.map((c: any) => ({
         id: c.id,
+        no: c.no,
         nombre: c.nombre,
-        rfc: c.rfc,
-        direccion: c.direccion,
-        ciudad: c.ciudad,
-        telefono: c.telefono,
+        rfc: c.rfc || '',
+        calle: c.calle || '',
+        numeroExt: c.numero_ext || '',
+        colonia: c.colonia || '',
+        cp: c.cp || '',
+        ciudad: c.ciudad || '',
+        estado: c.estado || '',
+        pais: c.pais || 'MEXICO',
+        telefono: c.telefono || '',
         email: c.email || '',
         contacto: c.contacto || '',
+        direccion: c.direccion || `${c.calle || ''} ${c.numero_ext ? '#' + c.numero_ext : ''} ${c.colonia ? 'Col. ' + c.colonia : ''}`.trim(),
+        activo: c.activo ?? true,
+        createdAt: c.created_at,
       }));
     } catch {
       return null;
@@ -157,15 +201,53 @@ export const SupabaseService = {
     try {
       const { error } = await supabase.from('clients').upsert({
         id: client.id,
+        no: client.no ? String(client.no) : null,
         nombre: client.nombre,
-        rfc: client.rfc,
-        direccion: client.direccion,
-        ciudad: client.ciudad,
-        telefono: client.telefono,
+        rfc: client.rfc || '',
+        calle: client.calle || '',
+        numero_ext: client.numeroExt || '',
+        colonia: client.colonia || '',
+        cp: client.cp || '',
+        ciudad: client.ciudad || '',
+        estado: client.estado || '',
+        pais: client.pais || 'MEXICO',
+        telefono: client.telefono || '',
         email: client.email || '',
         contacto: client.contacto || '',
+        direccion: client.direccion || `${client.calle || ''} ${client.numeroExt ? '#' + client.numeroExt : ''}`.trim(),
+        activo: client.activo ?? true,
         updated_at: new Date().toISOString(),
       });
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async upsertClientsBatch(clients: Client[]): Promise<boolean> {
+    try {
+      if (!clients || clients.length === 0) return true;
+      const rows = clients.map((client) => ({
+        id: client.id || `cli-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        no: client.no ? String(client.no) : null,
+        nombre: client.nombre,
+        rfc: client.rfc || '',
+        calle: client.calle || '',
+        numero_ext: client.numeroExt || '',
+        colonia: client.colonia || '',
+        cp: client.cp || '',
+        ciudad: client.ciudad || '',
+        estado: client.estado || '',
+        pais: client.pais || 'MEXICO',
+        telefono: client.telefono || '',
+        email: client.email || '',
+        contacto: client.contacto || '',
+        direccion: client.direccion || `${client.calle || ''} ${client.numeroExt ? '#' + client.numeroExt : ''}`.trim(),
+        activo: client.activo ?? true,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase.from('clients').upsert(rows);
       return !error;
     } catch {
       return false;
@@ -175,6 +257,16 @@ export const SupabaseService = {
   async deleteClient(id: string): Promise<boolean> {
     try {
       const { error } = await supabase.from('clients').delete().eq('id', id);
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async deleteMultipleClients(ids: string[]): Promise<boolean> {
+    try {
+      if (!ids || ids.length === 0) return true;
+      const { error } = await supabase.from('clients').delete().in('id', ids);
       return !error;
     } catch {
       return false;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useMemo, useRef, useState } from 'react';
 import {
   Users,
   Plus,
@@ -12,10 +12,25 @@ import {
   X,
   Building,
   FileSpreadsheet,
+  Upload,
+  Download,
+  Eye,
+  ToggleLeft,
+  ToggleRight,
+  ChevronLeft,
+  ChevronRight,
+  CheckSquare,
+  Square,
+  AlertTriangle,
+  Info,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Client } from '../types';
 import { StorageService } from '../services/storage';
-import { exportClientsToExcel } from '../utils/excelExporter';
+import {
+  downloadClientLayoutTemplate,
+  exportClientsToExcel,
+} from '../utils/excelExporter';
 
 interface ClientsModuleProps {
   clients: Client[];
@@ -23,260 +38,859 @@ interface ClientsModuleProps {
   onSelectForQuotation?: (client: Client) => void;
 }
 
+const ITEMS_PER_PAGE = 10;
+
 export const ClientsModule: React.FC<ClientsModuleProps> = ({
   clients,
   onRefresh,
   onSelectForQuotation,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'activos' | 'inactivos'>('todos');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Modals
+  const [showFormModal, setShowFormModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [viewingClient, setViewingClient] = useState<Client | null>(null);
+  const [showImportPreview, setShowImportPreview] = useState(false);
+  const [importedPreviewData, setImportedPreviewData] = useState<Client[]>([]);
 
-  // Form state
-  const [nombre, setNombre] = useState('');
-  const [rfc, setRfc] = useState('');
-  const [direccion, setDireccion] = useState('');
-  const [ciudad, setCiudad] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [email, setEmail] = useState('');
-  const [contacto, setContacto] = useState('');
+  // Form inputs matching ley_yout_clientes
+  const [formNo, setFormNo] = useState('');
+  const [formNombre, setFormNombre] = useState('');
+  const [formRfc, setFormRfc] = useState('');
+  const [formCalle, setFormCalle] = useState('');
+  const [formNumeroExt, setFormNumeroExt] = useState('');
+  const [formColonia, setFormColonia] = useState('');
+  const [formCp, setFormCp] = useState('');
+  const [formCiudad, setFormCiudad] = useState('');
+  const [formEstado, setFormEstado] = useState('');
+  const [formPais, setFormPais] = useState('MEXICO');
+  const [formTelefono, setFormTelefono] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formActivo, setFormActivo] = useState(true);
 
-  const [successMessage, setSuccessMessage] = useState('');
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const clientFileInputId = useId();
 
-  const filtered = clients.filter((c) => {
-    const term = searchTerm.toLowerCase();
-    return (
-      c.nombre.toLowerCase().includes(term) ||
-      (c.rfc && c.rfc.toLowerCase().includes(term)) ||
-      (c.ciudad && c.ciudad.toLowerCase().includes(term)) ||
-      (c.telefono && c.telefono.includes(term))
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 3500);
+  };
+
+  // Smart Search & Filtering
+  const filteredClients = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return clients.filter((c) => {
+      // Status filter
+      if (statusFilter === 'activos' && c.activo === false) return false;
+      if (statusFilter === 'inactivos' && c.activo !== false) return false;
+
+      if (!term) return true;
+
+      const fullString = [
+        c.no,
+        c.nombre,
+        c.rfc,
+        c.calle,
+        c.numeroExt,
+        c.colonia,
+        c.cp,
+        c.ciudad,
+        c.estado,
+        c.pais,
+        c.telefono,
+        c.email,
+        c.direccion,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return fullString.includes(term);
+    });
+  }, [clients, searchTerm, statusFilter]);
+
+  // Pagination (10 en 10)
+  const totalPages = Math.max(1, Math.ceil(filteredClients.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedClients = useMemo(() => {
+    const start = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+    return filteredClients.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredClients, safeCurrentPage]);
+
+  // Multi-selection helpers
+  const allCurrentPageSelected =
+    paginatedClients.length > 0 &&
+    paginatedClients.every((c) => selectedIds.includes(c.id));
+
+  const toggleSelectAllPage = () => {
+    if (allCurrentPageSelected) {
+      const pageIds = new Set(paginatedClients.map((c) => c.id));
+      setSelectedIds((prev) => prev.filter((id) => !pageIds.has(id)));
+    } else {
+      const newIds = Array.from(new Set([...selectedIds, ...paginatedClients.map((c) => c.id)]));
+      setSelectedIds(newIds);
+    }
+  };
+
+  const toggleSelectAllFiltered = () => {
+    if (selectedIds.length === filteredClients.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredClients.map((c) => c.id));
+    }
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
-  });
+  };
 
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    const count = selectedIds.length;
+    if (
+      window.confirm(
+        `¿Confirmas eliminar los ${count} cliente(s) seleccionados? Esta acción no se puede deshacer.`
+      )
+    ) {
+      StorageService.deleteMultipleClients(selectedIds);
+      setSelectedIds([]);
+      onRefresh();
+      showToast(`${count} cliente(s) eliminados correctamente`);
+    }
+  };
+
+  // Open Add Modal
   const handleOpenAdd = () => {
     setEditingClient(null);
-    setNombre('');
-    setRfc('');
-    setDireccion('');
-    setCiudad('SAN LUIS POTOSI, SAN LUIS POTOSI');
-    setTelefono('');
-    setEmail('');
-    setContacto('');
-    setShowModal(true);
+    setFormNo(String(clients.length + 1));
+    setFormNombre('');
+    setFormRfc('');
+    setFormCalle('');
+    setFormNumeroExt('');
+    setFormColonia('');
+    setFormCp('');
+    setFormCiudad('SAN LUIS POTOSI');
+    setFormEstado('SAN LUIS POTOSI');
+    setFormPais('MEXICO');
+    setFormTelefono('');
+    setFormEmail('');
+    setFormActivo(true);
+    setShowFormModal(true);
   };
 
+  // Open Edit Modal
   const handleOpenEdit = (c: Client) => {
     setEditingClient(c);
-    setNombre(c.nombre);
-    setRfc(c.rfc);
-    setDireccion(c.direccion);
-    setCiudad(c.ciudad);
-    setTelefono(c.telefono);
-    setEmail(c.email || '');
-    setContacto(c.contacto || '');
-    setShowModal(true);
+    setFormNo(c.no ? String(c.no) : '');
+    setFormNombre(c.nombre || '');
+    setFormRfc(c.rfc || '');
+    setFormCalle(c.calle || c.direccion || '');
+    setFormNumeroExt(c.numeroExt || '');
+    setFormColonia(c.colonia || '');
+    setFormCp(c.cp || '');
+    setFormCiudad(c.ciudad || 'SAN LUIS POTOSI');
+    setFormEstado(c.estado || 'SAN LUIS POTOSI');
+    setFormPais(c.pais || 'MEXICO');
+    setFormTelefono(c.telefono || '');
+    setFormEmail(c.email || '');
+    setFormActivo(c.activo !== false);
+    setShowFormModal(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nombre.trim()) return;
+  // Open View Details Modal
+  const handleOpenView = (c: Client) => {
+    setViewingClient(c);
+  };
 
-    const newClient: Client = {
-      id: editingClient ? editingClient.id : `cli-${Date.now()}`,
-      nombre: nombre.trim().toUpperCase(),
-      rfc: rfc.trim().toUpperCase(),
-      direccion: direccion.trim().toUpperCase(),
-      ciudad: ciudad.trim().toUpperCase(),
-      telefono: telefono.trim(),
-      email: email.trim(),
-      contacto: contacto.trim(),
+  // Toggle Single Client Active Status
+  const handleToggleActive = (c: Client) => {
+    StorageService.toggleClientActive(c.id);
+    onRefresh();
+    showToast(
+      `Cliente "${c.nombre}" ahora está ${c.activo === false ? 'ACTIVO' : 'INACTIVO'}`
+    );
+  };
+
+  // Single Delete
+  const handleDeleteOne = (c: Client) => {
+    if (window.confirm(`¿Estás seguro de eliminar al cliente "${c.nombre}"?`)) {
+      StorageService.deleteClient(c.id);
+      setSelectedIds((prev) => prev.filter((id) => id !== c.id));
+      onRefresh();
+      showToast('Cliente eliminado');
+    }
+  };
+
+  // Save Form
+  const handleSaveForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formNombre.trim()) {
+      showToast('El nombre del cliente es obligatorio', 'error');
+      return;
+    }
+
+    const fullDireccion = `${formCalle.trim()} ${formNumeroExt.trim() ? '#' + formNumeroExt.trim() : ''}${formColonia.trim() ? ', Col. ' + formColonia.trim() : ''}${formCp.trim() ? ' C.P. ' + formCp.trim() : ''}`.trim();
+
+    const clientToSave: Client = {
+      id: editingClient ? editingClient.id : `cli-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      no: formNo.trim() || undefined,
+      nombre: formNombre.trim().toUpperCase(),
+      rfc: formRfc.trim().toUpperCase(),
+      calle: formCalle.trim().toUpperCase(),
+      numeroExt: formNumeroExt.trim().toUpperCase(),
+      colonia: formColonia.trim().toUpperCase(),
+      cp: formCp.trim().toUpperCase(),
+      ciudad: formCiudad.trim().toUpperCase(),
+      estado: formEstado.trim().toUpperCase(),
+      pais: formPais.trim().toUpperCase(),
+      telefono: formTelefono.trim(),
+      email: formEmail.trim(),
+      direccion: fullDireccion.toUpperCase() || formCalle.trim().toUpperCase(),
+      activo: formActivo,
+      createdAt: editingClient?.createdAt || new Date().toISOString(),
     };
 
-    StorageService.saveClient(newClient);
+    StorageService.saveClient(clientToSave);
     onRefresh();
-    setShowModal(false);
-    setSuccessMessage(
+    setShowFormModal(false);
+    showToast(
       editingClient ? 'Cliente actualizado exitosamente' : 'Cliente registrado exitosamente'
     );
-    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (window.confirm(`¿Eliminar al cliente "${name}"?`)) {
-      StorageService.deleteClient(id);
-      onRefresh();
-    }
+  // File Import Logic (.xlsx, .xls, .csv)
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const firstSheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[firstSheetName];
+        const rawJson: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!rawJson || rawJson.length === 0) {
+          showToast('El archivo no contiene registros válidos', 'error');
+          return;
+        }
+
+        // Helper to find case-insensitive column match
+        const getVal = (row: any, ...candidates: string[]): string => {
+          for (const cand of candidates) {
+            const cleanCand = cand.toLowerCase().replace(/[^a-z0-9]/g, '');
+            for (const key of Object.keys(row)) {
+              const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (cleanKey === cleanCand || cleanKey.includes(cleanCand)) {
+                return String(row[key] || '').trim();
+              }
+            }
+          }
+          return '';
+        };
+
+        const parsed: Client[] = rawJson
+          .map((row, idx) => {
+            const noVal = getVal(row, 'no.', 'no', 'numero', 'id');
+            const nombreVal = getVal(row, 'nombre', 'razon social', 'cliente');
+            const rfcVal = getVal(row, 'rfc', 'tax_id');
+            const calleVal = getVal(row, 'calle', 'direccion', 'domicilio');
+            const numExtVal = getVal(row, '# ext.', 'ext', 'numero ext', 'num ext', 'no ext');
+            const coloniaVal = getVal(row, 'colonia', 'asentamiento');
+            const cpVal = getVal(row, 'c.p.', 'cp', 'codigo postal');
+            const ciudadVal = getVal(row, 'ciudad', 'municipio', 'localidad');
+            const estadoVal = getVal(row, 'estado', 'provincia', 'entidad');
+            const paisVal = getVal(row, 'pais', 'country') || 'MEXICO';
+            const telefonoVal = getVal(row, 'telefono1', 'telefono', 'tel', 'celular', 'whatsapp');
+            const emailVal = getVal(row, 'e-mail1', 'email', 'correo', 'e-mail');
+
+            if (!nombreVal) return null;
+
+            const fullDireccion = `${calleVal} ${numExtVal ? '#' + numExtVal : ''}${coloniaVal ? ', Col. ' + coloniaVal : ''}${cpVal ? ' C.P. ' + cpVal : ''}`.trim();
+
+            const item: Client = {
+              id: `cli-imp-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+              no: noVal || idx + 1,
+              nombre: nombreVal.toUpperCase(),
+              rfc: rfcVal.toUpperCase(),
+              calle: calleVal.toUpperCase(),
+              numeroExt: numExtVal.toUpperCase(),
+              colonia: coloniaVal.toUpperCase(),
+              cp: cpVal.toUpperCase(),
+              ciudad: ciudadVal.toUpperCase(),
+              estado: estadoVal.toUpperCase(),
+              pais: paisVal.toUpperCase(),
+              telefono: telefonoVal,
+              email: emailVal,
+              direccion: fullDireccion.toUpperCase() || calleVal.toUpperCase(),
+              activo: true,
+              createdAt: new Date().toISOString(),
+            };
+            return item;
+          })
+          .filter(Boolean) as Client[];
+
+        if (parsed.length === 0) {
+          showToast('No se identificaron clientes con nombres válidos', 'error');
+          return;
+        }
+
+        setImportedPreviewData(parsed);
+        setShowImportPreview(true);
+      } catch (err: any) {
+        console.error('Error importando archivo:', err);
+        showToast('Error al leer el archivo. Verifica el formato Excel o CSV.', 'error');
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleConfirmImport = () => {
+    if (importedPreviewData.length === 0) return;
+    StorageService.saveClientsBatch(importedPreviewData);
+    setShowImportPreview(false);
+    setImportedPreviewData([]);
+    onRefresh();
+    showToast(
+      `¡Se importaron ${importedPreviewData.length} clientes correctamente a tu base de datos!`
+    );
   };
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 pb-20">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-6 bg-white rounded-2xl border border-gray-200 shadow-xs">
+      {/* Hidden File Input */}
+      <input
+        type="file"
+        id={clientFileInputId}
+        name="client_excel_file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+      />
+
+      {/* Top Banner & Main Actions */}
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 p-5 bg-white rounded-2xl border border-gray-200 shadow-xs">
         <div>
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Users className="w-5 h-5 text-[#66C34E]" />
-            Directorio de Clientes ({clients.length})
-          </h2>
-          <p className="text-xs text-gray-500">
-            Administra tus clientes, RFC, domicilios fiscales y teléfonos para cotizaciones rápidas
-          </p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#66C34E] flex items-center justify-center font-bold">
+              <Users className="w-6 h-6 text-[#66C34E]" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                Directorio de Clientes
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                  {clients.length} registrados
+                </span>
+              </h2>
+              <p className="text-xs text-gray-500">
+                Estructura oficial del layout de clientes. Importa, exporta, gestiona datos fiscales y domiciliares.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+          {/* Download Template */}
           <button
-            onClick={() => exportClientsToExcel(filtered)}
+            onClick={downloadClientLayoutTemplate}
             type="button"
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
-            title="Exportar directorio de clientes a Excel (.xlsx)"
+            className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer border border-gray-200"
+            title="Descargar plantilla de Excel vacía con el formato de clientes"
           >
-            <FileSpreadsheet className="w-4 h-4" />
+            <Download className="w-4 h-4 text-gray-600" />
+            <span>Descargar Plantilla</span>
+          </button>
+
+          {/* Import File Button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            type="button"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+            title="Importar base de datos de clientes desde Excel (.xlsx) o CSV"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Importar Excel / CSV</span>
+          </button>
+
+          {/* Export File Button */}
+          <button
+            onClick={() => exportClientsToExcel(filteredClients)}
+            type="button"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+            title="Exportar registros filtrados a Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
             <span>Exportar Excel</span>
           </button>
 
+          {/* New Client */}
           <button
             onClick={handleOpenAdd}
             type="button"
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
           >
             <Plus className="w-4 h-4" />
-            <span>Registrar Cliente</span>
+            <span>Nuevo Cliente</span>
           </button>
         </div>
       </div>
 
-      {successMessage && (
-        <div className="p-4 rounded-xl bg-green-50 border border-green-200 text-green-800 flex items-center gap-2 animate-in fade-in">
-          <CheckCircle className="w-4 h-4 text-[#66C34E]" />
-          <span className="text-xs font-semibold">{successMessage}</span>
+      {/* Toast Notification */}
+      {notification && (
+        <div
+          className={`p-4 rounded-xl border flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 ${
+            notification.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : 'bg-red-50 border-red-200 text-red-900'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-[#66C34E]" />
+            <span className="text-xs font-bold">{notification.message}</span>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-gray-400 hover:text-gray-700"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
       {/* Main Container */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
-        {/* Search Header */}
-        <div className="p-4 sm:p-6 border-b border-gray-200">
-          <div className="w-full sm:w-96 relative">
+        {/* Search, Status Tabs & Bulk Action Bar */}
+        <div className="p-4 sm:p-5 border-b border-gray-200 flex flex-col md:flex-row items-center justify-between gap-3 bg-gray-50/50">
+          <div className="w-full md:w-96 relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por cliente, RFC, ciudad o teléfono..."
-              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-xl text-xs sm:text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#66C34E]"
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Buscador inteligente: nombre, RFC, calle, CP, ciudad, tel..."
+              className="w-full pl-9 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#66C34E]"
             />
+          </div>
+
+          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+            {/* Status Segmented Buttons */}
+            <div className="flex items-center bg-gray-200/80 p-0.5 rounded-xl text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter('todos');
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  statusFilter === 'todos'
+                    ? 'bg-white text-gray-900 shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Todos ({clients.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter('activos');
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  statusFilter === 'activos'
+                    ? 'bg-white text-emerald-700 shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Activos ({clients.filter((c) => c.activo !== false).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter('inactivos');
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  statusFilter === 'inactivos'
+                    ? 'bg-white text-amber-700 shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Inactivos ({clients.filter((c) => c.activo === false).length})
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Clients Cards Grid */}
-        <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-gray-400 space-y-2">
-              <Users className="w-12 h-12 mx-auto text-gray-300" />
-              <div className="text-sm font-semibold text-gray-600">No se encontraron clientes</div>
-              <p className="text-xs text-gray-400">
-                {searchTerm
-                  ? 'No hay resultados para la búsqueda ingresada.'
-                  : 'Registra a tu primer cliente para comenzar a cotizar.'}
-              </p>
-            </div>
-          ) : (
-            filtered.map((c) => (
-              <div
-                key={c.id}
-                className="p-5 bg-gray-50/70 hover:bg-white border border-gray-200 hover:border-[#66C34E] rounded-xl shadow-xs transition duration-150 flex flex-col justify-between space-y-3"
+        {/* Bulk Action Banner when 1+ selected */}
+        {selectedIds.length > 0 && (
+          <div className="px-5 py-3 bg-emerald-50 border-b border-emerald-200 flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <CheckSquare className="w-4 h-4 text-[#66C34E]" />
+              <span className="text-xs font-bold text-emerald-950">
+                {selectedIds.length} cliente(s) seleccionado(s)
+              </span>
+              <button
+                onClick={toggleSelectAllFiltered}
+                type="button"
+                className="text-xs text-emerald-700 underline font-semibold ml-2 hover:text-emerald-900"
               >
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-sm font-bold text-gray-900 uppercase leading-snug">
-                      {c.nombre}
-                    </span>
-                    <span className="bg-[#C3CAD0] text-gray-900 text-[10px] font-mono font-bold px-2 py-0.5 rounded shrink-0">
-                      {c.rfc || 'S/RFC'}
-                    </span>
-                  </div>
+                {selectedIds.length === filteredClients.length
+                  ? 'Deseleccionar todos'
+                  : `Seleccionar los ${filteredClients.length} filtrados`}
+              </button>
+            </div>
 
-                  {c.direccion && (
-                    <div className="flex items-start gap-1.5 text-xs text-gray-600">
-                      <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
-                      <span className="uppercase text-[11px]">{c.direccion}</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedIds([])}
+                type="button"
+                className="px-3 py-1.5 text-xs font-bold text-gray-600 hover:text-gray-900 bg-white border border-gray-300 rounded-lg"
+              >
+                Cancelar Selección
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-xs transition"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Borrar seleccionados ({selectedIds.length})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Layout Table View */}
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="bg-[#C3CAD0] text-gray-900 font-bold uppercase text-[11px] border-b border-gray-300 select-none">
+                <th className="py-3 px-3 text-center w-10">
+                  <button
+                    onClick={toggleSelectAllPage}
+                    type="button"
+                    className="cursor-pointer text-gray-700 hover:text-black flex items-center justify-center"
+                    title={allCurrentPageSelected ? 'Deseleccionar página' : 'Seleccionar página completa'}
+                  >
+                    {allCurrentPageSelected ? (
+                      <CheckSquare className="w-4 h-4 text-[#66C34E]" />
+                    ) : (
+                      <Square className="w-4 h-4 text-gray-600" />
+                    )}
+                  </button>
+                </th>
+                <th className="py-3 px-2 w-14 text-center">No.</th>
+                <th className="py-3 px-3 min-w-[200px]">Nombre / Razón Social</th>
+                <th className="py-3 px-3 w-32">RFC</th>
+                <th className="py-3 px-3 min-w-[220px]">Dirección (Calle, #, Col, C.P.)</th>
+                <th className="py-3 px-3 w-36">Ciudad / Estado</th>
+                <th className="py-3 px-3 w-32">Teléfono</th>
+                <th className="py-3 px-3 w-24 text-center">Estado</th>
+                <th className="py-3 px-3 w-36 text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {filteredClients.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-16 text-center text-gray-400">
+                    <div className="max-w-md mx-auto space-y-3">
+                      <div className="w-14 h-14 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                        <Users className="w-7 h-7" />
+                      </div>
+                      <div className="text-base font-bold text-gray-800">
+                        {searchTerm
+                          ? 'No hay clientes que coincidan con la búsqueda'
+                          : 'No hay clientes registrados en la base de datos'}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {searchTerm
+                          ? 'Intenta con otro término o limpia el buscador inteligente.'
+                          : 'Importa tu archivo Excel con la estructura ley_yout_clientes o registra a tu primer cliente.'}
+                      </p>
+                      {!searchTerm && (
+                        <div className="pt-2 flex items-center justify-center gap-3">
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            type="button"
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                          >
+                            <Upload className="w-4 h-4" />
+                            <span>Importar desde Excel</span>
+                          </button>
+                          <button
+                            onClick={handleOpenAdd}
+                            type="button"
+                            className="px-4 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Nuevo Cliente</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </td>
+                </tr>
+              ) : (
+                paginatedClients.map((c, index) => {
+                  const isSelected = selectedIds.includes(c.id);
+                  const isInactive = c.activo === false;
+                  const displayNo = c.no || (safeCurrentPage - 1) * ITEMS_PER_PAGE + index + 1;
 
-                  {c.ciudad && (
-                    <div className="text-[11px] font-medium text-gray-500 pl-5 uppercase">
-                      {c.ciudad}
-                    </div>
-                  )}
-
-                  {c.telefono && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-700 font-medium">
-                      <Phone className="w-3.5 h-3.5 text-[#66C34E] shrink-0" />
-                      <span>{c.telefono}</span>
-                    </div>
-                  )}
-
-                  {c.email && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                      <Mail className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                      <span className="truncate">{c.email}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-3 border-t border-gray-200/60 flex items-center justify-between">
-                  {onSelectForQuotation && (
-                    <button
-                      onClick={() => onSelectForQuotation(c)}
-                      type="button"
-                      className="text-xs font-bold text-[#66C34E] hover:underline"
+                  return (
+                    <tr
+                      key={c.id}
+                      className={`hover:bg-gray-50/90 transition ${
+                        isSelected ? 'bg-emerald-50/50' : ''
+                      } ${isInactive ? 'opacity-65 bg-gray-50/40' : ''}`}
                     >
-                      Cotizar a este cliente &rarr;
-                    </button>
-                  )}
+                      {/* Checkbox */}
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          onClick={() => toggleSelectOne(c.id)}
+                          type="button"
+                          className="cursor-pointer text-gray-500 hover:text-black flex items-center justify-center"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-[#66C34E]" />
+                          ) : (
+                            <Square className="w-4 h-4 text-gray-400" />
+                          )}
+                        </button>
+                      </td>
 
-                  <div className="flex items-center gap-1 ml-auto">
-                    <button
-                      onClick={() => handleOpenEdit(c)}
-                      type="button"
-                      className="p-1.5 rounded-lg text-gray-500 hover:text-black hover:bg-gray-200 transition cursor-pointer"
-                      title="Editar cliente"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(c.id, c.nombre)}
-                      type="button"
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
-                      title="Eliminar cliente"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
+                      {/* No. */}
+                      <td className="py-3 px-2 text-center font-mono text-xs font-bold text-gray-600">
+                        {displayNo}
+                      </td>
+
+                      {/* Nombre */}
+                      <td className="py-3 px-3 font-bold text-gray-900 uppercase">
+                        <div className="flex flex-col">
+                          <span className="leading-snug">{c.nombre}</span>
+                          {c.email && (
+                            <span className="text-[11px] font-normal text-gray-500 lowercase flex items-center gap-1 mt-0.5">
+                              <Mail className="w-3 h-3 text-gray-400 shrink-0" />
+                              {c.email}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* RFC */}
+                      <td className="py-3 px-3 font-mono font-bold text-gray-800">
+                        <span className="bg-gray-100 px-2 py-0.5 rounded border border-gray-200 text-[11px]">
+                          {c.rfc || 'S/RFC'}
+                        </span>
+                      </td>
+
+                      {/* Domicilio Completo */}
+                      <td className="py-3 px-3 text-gray-700">
+                        <div className="flex items-start gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
+                          <span className="uppercase text-[11px] leading-tight">
+                            {c.direccion || `${c.calle || ''} ${c.numeroExt ? '#' + c.numeroExt : ''} ${c.colonia ? 'Col. ' + c.colonia : ''} ${c.cp ? 'C.P. ' + c.cp : ''}`.trim() || '—'}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Ciudad / Estado */}
+                      <td className="py-3 px-3 uppercase font-medium text-gray-600 text-[11px]">
+                        {c.ciudad || c.estado ? `${c.ciudad || ''}${c.estado ? ', ' + c.estado : ''}` : '—'}
+                      </td>
+
+                      {/* Teléfono */}
+                      <td className="py-3 px-3 font-medium text-gray-800">
+                        {c.telefono ? (
+                          <div className="flex items-center gap-1 text-[11px]">
+                            <Phone className="w-3 h-3 text-[#66C34E] shrink-0" />
+                            <span>{c.telefono}</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+
+                      {/* Estado (Activo / Inactivo) */}
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          onClick={() => handleToggleActive(c)}
+                          type="button"
+                          className="group inline-flex items-center gap-1 cursor-pointer"
+                          title={isInactive ? 'Hacer clic para activar cliente' : 'Hacer clic para desactivar cliente'}
+                        >
+                          {isInactive ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 group-hover:bg-amber-200">
+                              <ToggleLeft className="w-3 h-3 text-amber-600" /> Inactivo
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 group-hover:bg-emerald-200">
+                              <ToggleRight className="w-3 h-3 text-emerald-600" /> Activo
+                            </span>
+                          )}
+                        </button>
+                      </td>
+
+                      {/* Acciones */}
+                      <td className="py-3 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {/* View details */}
+                          <button
+                            onClick={() => handleOpenView(c)}
+                            type="button"
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
+                            title="Ver ficha completa del cliente"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Edit */}
+                          <button
+                            onClick={() => handleOpenEdit(c)}
+                            type="button"
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-blue-700 hover:bg-blue-50 transition cursor-pointer"
+                            title="Editar datos del cliente"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete */}
+                          <button
+                            onClick={() => handleDeleteOne(c)}
+                            type="button"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                            title="Eliminar cliente"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
+
+        {/* Pagination Controls (10 en 10) */}
+        {filteredClients.length > 0 && (
+          <div className="p-4 sm:px-6 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/70 text-xs">
+            <div className="text-gray-600 font-medium">
+              Mostrando <span className="font-bold text-gray-900">{(safeCurrentPage - 1) * ITEMS_PER_PAGE + 1}</span> a{' '}
+              <span className="font-bold text-gray-900">
+                {Math.min(safeCurrentPage * ITEMS_PER_PAGE, filteredClients.length)}
+              </span>{' '}
+              de <span className="font-bold text-gray-900">{filteredClients.length}</span> clientes
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safeCurrentPage === 1}
+                className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-700 font-bold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Anterior</span>
+              </button>
+
+              <div className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg font-bold text-gray-800">
+                Página {safeCurrentPage} de {totalPages}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safeCurrentPage === totalPages}
+                className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-700 font-bold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+              >
+                <span>Siguiente</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Modal Add / Edit Client */}
-      {showModal && (
+      {/* Modal Add / Edit Client with all layout fields */}
+      {showFormModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200">
               <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
                 <Building className="w-5 h-5 text-[#66C34E]" />
-                {editingClient ? 'Editar Cliente' : 'Nuevo Cliente'}
+                {editingClient ? 'Editar Cliente' : 'Registrar Nuevo Cliente'}
               </h3>
               <button
-                onClick={() => setShowModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg"
+                onClick={() => setShowFormModal(false)}
+                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="mt-4 space-y-4">
+            <form onSubmit={handleSaveForm} className="mt-4 space-y-4">
+              {/* Row 1: No. & Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
+                    No. de Registro
+                  </label>
+                  <input
+                    type="text"
+                    value={formNo}
+                    onChange={(e) => setFormNo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-[#66C34E]"
+                    placeholder="1"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
+                    Estatus del Cliente
+                  </label>
+                  <div className="flex items-center gap-3 pt-1">
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-gray-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="client_status"
+                        checked={formActivo}
+                        onChange={() => setFormActivo(true)}
+                        className="text-[#66C34E] focus:ring-[#66C34E]"
+                      />
+                      <span className="text-emerald-700">Activo (Habilitado para cotizar)</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-gray-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="client_status"
+                        checked={!formActivo}
+                        onChange={() => setFormActivo(false)}
+                        className="text-amber-600 focus:ring-amber-500"
+                      />
+                      <span className="text-amber-700">Inactivo</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Nombre Completo */}
               <div>
                 <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
                   Nombre Completo o Razón Social *
@@ -284,98 +898,389 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
                 <input
                   type="text"
                   required
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs uppercase font-semibold focus:ring-2 focus:ring-[#66C34E]"
+                  value={formNombre}
+                  onChange={(e) => setFormNombre(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs uppercase font-bold text-gray-900 focus:ring-2 focus:ring-[#66C34E]"
                   placeholder="FRANCISCO JAVIER MATA MOLINA"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Row 3: RFC, Teléfono, Email */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
                     RFC
                   </label>
                   <input
                     type="text"
-                    value={rfc}
-                    onChange={(e) => setRfc(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono uppercase focus:ring-2 focus:ring-[#66C34E]"
+                    value={formRfc}
+                    onChange={(e) => setFormRfc(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono uppercase font-bold focus:ring-2 focus:ring-[#66C34E]"
                     placeholder="MAMF5512033Y8"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
-                    Teléfono
+                    Teléfono 1
                   </label>
                   <input
                     type="text"
-                    value={telefono}
-                    onChange={(e) => setTelefono(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-[#66C34E]"
+                    value={formTelefono}
+                    onChange={(e) => setFormTelefono(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-[#66C34E]"
                     placeholder="(488) 123-45-67"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
-                  Dirección (Calle, Número, Colonia, C.P.)
-                </label>
-                <input
-                  type="text"
-                  value={direccion}
-                  onChange={(e) => setDireccion(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs uppercase focus:ring-2 focus:ring-[#66C34E]"
-                  placeholder="GUERRERO 100, MATEHUALA CENTRO C.P. 78700"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
-                    Ciudad / Estado
-                  </label>
-                  <input
-                    type="text"
-                    value={ciudad}
-                    onChange={(e) => setCiudad(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs uppercase focus:ring-2 focus:ring-[#66C34E]"
-                    placeholder="MATEHUALA, SAN LUIS POTOSI"
-                  />
-                </div>
 
                 <div>
                   <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
-                    Email
+                    Correo Electrónico (E-MAIL 1)
                   </label>
                   <input
                     type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-[#66C34E]"
                     placeholder="cliente@ejemplo.com"
                   />
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-gray-200 flex justify-end gap-2">
+              {/* Row 4: Calle & # Ext. */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
+                    Calle
+                  </label>
+                  <input
+                    type="text"
+                    value={formCalle}
+                    onChange={(e) => setFormCalle(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs uppercase focus:ring-2 focus:ring-[#66C34E]"
+                    placeholder="GUERRERO"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
+                    # Ext.
+                  </label>
+                  <input
+                    type="text"
+                    value={formNumeroExt}
+                    onChange={(e) => setFormNumeroExt(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs uppercase focus:ring-2 focus:ring-[#66C34E]"
+                    placeholder="100"
+                  />
+                </div>
+              </div>
+
+              {/* Row 5: Colonia & C.P. */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
+                    Colonia
+                  </label>
+                  <input
+                    type="text"
+                    value={formColonia}
+                    onChange={(e) => setFormColonia(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs uppercase focus:ring-2 focus:ring-[#66C34E]"
+                    placeholder="CENTRO"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
+                    Código Postal (C.P.)
+                  </label>
+                  <input
+                    type="text"
+                    value={formCp}
+                    onChange={(e) => setFormCp(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono uppercase focus:ring-2 focus:ring-[#66C34E]"
+                    placeholder="78700"
+                  />
+                </div>
+              </div>
+
+              {/* Row 6: Ciudad, Estado, País */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
+                    Ciudad
+                  </label>
+                  <input
+                    type="text"
+                    value={formCiudad}
+                    onChange={(e) => setFormCiudad(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs uppercase focus:ring-2 focus:ring-[#66C34E]"
+                    placeholder="MATEHUALA"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
+                    Estado
+                  </label>
+                  <input
+                    type="text"
+                    value={formEstado}
+                    onChange={(e) => setFormEstado(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs uppercase focus:ring-2 focus:ring-[#66C34E]"
+                    placeholder="SAN LUIS POTOSI"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-gray-700 mb-1">
+                    País
+                  </label>
+                  <input
+                    type="text"
+                    value={formPais}
+                    onChange={(e) => setFormPais(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs uppercase focus:ring-2 focus:ring-[#66C34E]"
+                    placeholder="MEXICO"
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="pt-4 border-t border-gray-200 flex justify-end gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-100"
+                  onClick={() => setShowFormModal(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-bold transition shadow-xs"
+                  className="px-5 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
                 >
-                  {editingClient ? 'Guardar Cambios' : 'Registrar'}
+                  {editingClient ? 'Guardar Cambios' : 'Registrar Cliente'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal View Client Details */}
+      {viewingClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-[#66C34E] flex items-center justify-center font-bold">
+                  <Users className="w-5 h-5 text-[#66C34E]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Ficha del Cliente</h3>
+                  <span className="text-[11px] text-gray-500 font-mono">
+                    No. {viewingClient.no || '—'}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingClient(null)}
+                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3 text-xs">
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="text-[10px] font-bold uppercase text-gray-500">Nombre / Razón Social</div>
+                <div className="text-sm font-black text-gray-900 uppercase mt-0.5">
+                  {viewingClient.nombre}
+                </div>
+                <div className="flex items-center gap-3 mt-2">
+                  <span className="font-mono font-bold bg-[#C3CAD0] text-gray-900 px-2 py-0.5 rounded text-[11px]">
+                    RFC: {viewingClient.rfc || 'S/RFC'}
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      viewingClient.activo === false
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    {viewingClient.activo === false ? 'Inactivo' : 'Activo'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="text-[10px] font-bold uppercase text-gray-500">Teléfono</div>
+                  <div className="font-bold text-gray-900 mt-0.5">
+                    {viewingClient.telefono || 'Sin teléfono'}
+                  </div>
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="text-[10px] font-bold uppercase text-gray-500">E-mail</div>
+                  <div className="font-medium text-gray-900 mt-0.5 truncate">
+                    {viewingClient.email || 'Sin correo'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 space-y-1">
+                <div className="text-[10px] font-bold uppercase text-gray-500">Domicilio Fiscal</div>
+                <div className="font-semibold text-gray-900 uppercase">
+                  {viewingClient.direccion ||
+                    `${viewingClient.calle || ''} ${viewingClient.numeroExt ? '#' + viewingClient.numeroExt : ''}`.trim() ||
+                    'Sin domicilio'}
+                </div>
+                <div className="text-gray-600 uppercase text-[11px]">
+                  {[
+                    viewingClient.colonia ? `Col. ${viewingClient.colonia}` : null,
+                    viewingClient.cp ? `C.P. ${viewingClient.cp}` : null,
+                    viewingClient.ciudad,
+                    viewingClient.estado,
+                    viewingClient.pais,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 pt-3 border-t border-gray-200 flex items-center justify-between">
+              {onSelectForQuotation && viewingClient.activo !== false && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectForQuotation(viewingClient);
+                    setViewingClient(null);
+                  }}
+                  className="px-3.5 py-1.5 bg-[#66C34E] text-white rounded-xl text-xs font-bold hover:bg-[#52a33c]"
+                >
+                  Usar para Cotizar
+                </button>
+              )}
+
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const c = viewingClient;
+                    setViewingClient(null);
+                    handleOpenEdit(c);
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewingClient(null)}
+                  className="px-4 py-1.5 bg-gray-800 text-white rounded-xl text-xs font-bold hover:bg-gray-900"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Import Preview */}
+      {showImportPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl p-6 max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                <h3 className="text-base font-bold text-gray-900">
+                  Vista Previa de Importación de Clientes ({importedPreviewData.length})
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowImportPreview(false);
+                  setImportedPreviewData([]);
+                }}
+                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 my-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-start gap-2 text-xs text-emerald-900">
+              <Info className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>
+                Se detectaron <strong>{importedPreviewData.length} registros</strong> válidos listos para ser incorporados al sistema y sincronizados con Supabase.
+              </span>
+            </div>
+
+            <div className="overflow-y-auto flex-1 border border-gray-200 rounded-xl">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead>
+                  <tr className="bg-gray-100 font-bold uppercase text-[10px] text-gray-700 sticky top-0">
+                    <th className="p-2 w-10 text-center">No.</th>
+                    <th className="p-2">Nombre</th>
+                    <th className="p-2">RFC</th>
+                    <th className="p-2">Domicilio</th>
+                    <th className="p-2">Ciudad</th>
+                    <th className="p-2">Teléfono</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {importedPreviewData.slice(0, 15).map((row, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="p-2 text-center font-mono text-[11px] text-gray-600">
+                        {row.no || idx + 1}
+                      </td>
+                      <td className="p-2 font-bold text-gray-900 uppercase">
+                        {row.nombre}
+                      </td>
+                      <td className="p-2 font-mono text-[11px]">{row.rfc || 'S/RFC'}</td>
+                      <td className="p-2 text-gray-600 truncate max-w-xs uppercase">
+                        {row.direccion || row.calle || '—'}
+                      </td>
+                      <td className="p-2 text-gray-600 uppercase">{row.ciudad || '—'}</td>
+                      <td className="p-2 text-gray-800">{row.telefono || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {importedPreviewData.length > 15 && (
+                <div className="p-2 text-center text-xs text-gray-500 bg-gray-50 font-medium">
+                  ... y {importedPreviewData.length - 15} clientes más
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 mt-3 border-t border-gray-200 flex items-center justify-between">
+              <span className="text-xs text-gray-500">
+                Los clientes existentes con el mismo RFC se actualizarán automáticamente.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowImportPreview(false);
+                    setImportedPreviewData([]);
+                  }}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmImport}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+                >
+                  Confirmar e Importar {importedPreviewData.length} Clientes
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

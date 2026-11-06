@@ -297,7 +297,7 @@ export function exportSingleQuotationToExcel(quotation: Quotation) {
 }
 
 /**
- * Export Products Catalog to Excel (.xlsx)
+ * Export Products Catalog to Excel (.xlsx) matching Catalogo_Productos_ROGUX layout
  */
 export function exportProductsToExcel(products: Product[], filename = 'Catalogo_Productos_ROGUX.xlsx') {
   const wb = XLSX.utils.book_new();
@@ -305,53 +305,135 @@ export function exportProductsToExcel(products: Product[], filename = 'Catalogo_
   const rows = products.map((p) => ({
     'Código / Clave': p.codigo,
     'Descripción del Producto': p.descripcion,
-    'Unidad de Medida': p.unidadMedida,
+    'Unidad de Medida': p.unidadMedida || 'PIEZAS',
     'Precio Unitario ($)': p.precioUnitario,
     'Categoría': p.categoria || 'General',
-    'Stock Disponible': p.stock !== undefined ? p.stock : 'N/A',
+    'Stock Disponible': p.stock !== undefined ? p.stock : 0,
+    'Estatus': p.activo === false ? 'INACTIVO' : 'ACTIVO',
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = [
     { wch: 18 },
     { wch: 55 },
-    { wch: 16 },
     { wch: 18 },
+    { wch: 20 },
     { wch: 25 },
-    { wch: 16 },
+    { wch: 18 },
+    { wch: 14 },
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws, 'Catálogo de Productos');
+  XLSX.utils.book_append_sheet(wb, ws, 'Catálogo Productos');
   downloadWorkbook(wb, filename);
 }
 
 /**
- * Export Clients Directory to Excel (.xlsx)
+ * Download empty Product Layout Template
+ */
+export function downloadProductLayoutTemplate() {
+  const wb = XLSX.utils.book_new();
+  const sample = [
+    {
+      'Código / Clave': 'M1251',
+      'Descripción del Producto': 'BICARBONATO DE SODIO C/12 100 GRS JALOMA',
+      'Unidad de Medida': 'PIEZAS',
+      'Precio Unitario ($)': 10.21,
+      'Categoría': 'Higiene y Cuidado',
+      'Stock Disponible': 250,
+    },
+  ];
+  const ws = XLSX.utils.json_to_sheet(sample);
+  ws['!cols'] = [
+    { wch: 18 },
+    { wch: 55 },
+    { wch: 18 },
+    { wch: 20 },
+    { wch: 25 },
+    { wch: 18 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Plantilla Productos');
+  downloadWorkbook(wb, 'Plantilla_Catalogo_Productos_ROGUX.xlsx');
+}
+
+/**
+ * Export Clients Directory to Excel (.xlsx) matching ley_yout_clientes layout
  */
 export function exportClientsToExcel(clients: Client[], filename = 'Directorio_Clientes_ROGUX.xlsx') {
   const wb = XLSX.utils.book_new();
 
-  const rows = clients.map((c) => ({
-    'Razón Social / Nombre': c.nombre,
-    'RFC': c.rfc,
-    'Dirección': c.direccion,
-    'Ciudad / Estado': c.ciudad,
-    'Teléfono': c.telefono,
-    'Correo Electrónico': c.email || 'N/A',
-    'Contacto': c.contacto || 'N/A',
+  const rows = clients.map((c, idx) => ({
+    'No.': c.no || idx + 1,
+    'NOMBRE': c.nombre,
+    'RFC': c.rfc || '',
+    'CALLE': c.calle || c.direccion || '',
+    '# EXT.': c.numeroExt || '',
+    'COLONIA': c.colonia || '',
+    'C.P.': c.cp || '',
+    'CIUDAD': c.ciudad || '',
+    'ESTADO': c.estado || 'SAN LUIS POTOSI',
+    'PAIS': c.pais || 'MEXICO',
+    'TELEFONO1': c.telefono || '',
+    'E-MAIL1': c.email || '',
+    'ESTATUS': c.activo === false ? 'INACTIVO' : 'ACTIVO',
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);
   ws['!cols'] = [
-    { wch: 35 },
+    { wch: 8 },
+    { wch: 38 },
     { wch: 18 },
-    { wch: 45 },
     { wch: 30 },
+    { wch: 10 },
+    { wch: 22 },
+    { wch: 10 },
+    { wch: 22 },
+    { wch: 20 },
+    { wch: 12 },
     { wch: 18 },
-    { wch: 28 },
-    { wch: 25 },
+    { wch: 30 },
+    { wch: 14 },
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws, 'Directorio de Clientes');
+  XLSX.utils.book_append_sheet(wb, ws, 'Directorio Clientes');
   downloadWorkbook(wb, filename);
+}
+
+/**
+ * Download empty Client Layout Template matching ley_yout_clientes
+ */
+export function downloadClientLayoutTemplate() {
+  const wb = XLSX.utils.book_new();
+  const sample = [
+    {
+      'No.': 1,
+      'NOMBRE': 'FRANCISCO JAVIER MATA MOLINA',
+      'RFC': 'MAMF5512033Y8',
+      'CALLE': 'GUERRERO',
+      '# EXT.': '100',
+      'COLONIA': 'CENTRO',
+      'C.P.': '78700',
+      'CIUDAD': 'MATEHUALA',
+      'ESTADO': 'SAN LUIS POTOSI',
+      'PAIS': 'MEXICO',
+      'TELEFONO1': '(488) 123-45-67',
+      'E-MAIL1': 'javier.mata@ejemplo.com',
+    },
+  ];
+  const ws = XLSX.utils.json_to_sheet(sample);
+  ws['!cols'] = [
+    { wch: 8 },
+    { wch: 38 },
+    { wch: 18 },
+    { wch: 30 },
+    { wch: 10 },
+    { wch: 22 },
+    { wch: 10 },
+    { wch: 22 },
+    { wch: 20 },
+    { wch: 12 },
+    { wch: 18 },
+    { wch: 30 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Plantilla Clientes');
+  downloadWorkbook(wb, 'Plantilla_Leyout_Clientes_ROGUX.xlsx');
 }

@@ -86,17 +86,28 @@ export interface Product {
   precioUnitario: number;
   categoria?: string;
   stock?: number;
+  activo?: boolean;
+  createdAt?: string;
 }
 
 export interface Client {
   id: string;
+  no?: string | number;
   nombre: string;
   rfc: string;
-  direccion: string;
+  calle?: string;
+  numeroExt?: string;
+  colonia?: string;
+  cp?: string;
   ciudad: string;
+  estado?: string;
+  pais?: string;
   telefono: string;
   email?: string;
   contacto?: string;
+  direccion?: string;
+  activo?: boolean;
+  createdAt?: string;
 }
 
 export interface SaleNoteItem {

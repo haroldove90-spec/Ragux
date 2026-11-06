@@ -151,10 +151,10 @@ export const SaleNoteForm: React.FC<SaleNoteFormProps> = ({
     const found = clients.find((c) => c.id === clientId);
     if (found) {
       setClienteNombre(found.nombre);
-      setClienteRfc(found.rfc);
-      setClienteDireccion(found.direccion);
+      setClienteRfc(found.rfc || '');
+      setClienteDireccion(found.direccion || `${found.calle || ''} ${found.numeroExt ? '#' + found.numeroExt : ''}`.trim());
       setClienteCiudad(found.ciudad);
-      setClienteTelefono(found.telefono);
+      setClienteTelefono(found.telefono || '');
     }
   };
 
@@ -162,10 +162,10 @@ export const SaleNoteForm: React.FC<SaleNoteFormProps> = ({
   const handleClientSelectedFromModal = (client: Client) => {
     setSelectedClientId(client.id);
     setClienteNombre(client.nombre);
-    setClienteRfc(client.rfc);
-    setClienteDireccion(client.direccion);
+    setClienteRfc(client.rfc || '');
+    setClienteDireccion(client.direccion || `${client.calle || ''} ${client.numeroExt ? '#' + client.numeroExt : ''}`.trim());
     setClienteCiudad(client.ciudad);
-    setClienteTelefono(client.telefono);
+    setClienteTelefono(client.telefono || '');
   };
 
   // Add item from quick select or modal

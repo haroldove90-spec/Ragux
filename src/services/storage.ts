@@ -522,7 +522,14 @@ export const StorageService = {
 
   // Products
   getProducts(): Product[] {
-    return safeGet<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    const list = safeGet<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    // If list only contains legacy sample products (starting with 'prod-0' or 'prod-1', 'prod-2', 'prod-3'), clear them
+    const hasOnlySampleProducts = list.length > 0 && list.every((p) => p.id.startsWith('prod-'));
+    if (hasOnlySampleProducts && !localStorage.getItem('rogux_user_imported_products')) {
+      safeSet(STORAGE_KEYS.PRODUCTS, []);
+      return [];
+    }
+    return list;
   },
 
   saveProduct(product: Product): void {
@@ -530,19 +537,73 @@ export const StorageService = {
     const existingIndex = current.findIndex((p) => p.id === product.id);
     let updated: Product[];
 
+    const productToSave: Product = {
+      ...product,
+      activo: product.activo !== undefined ? product.activo : true,
+    };
+
     if (existingIndex >= 0) {
       updated = [...current];
-      updated[existingIndex] = product;
+      updated[existingIndex] = productToSave;
     } else {
-      updated = [product, ...current];
+      updated = [productToSave, ...current];
     }
 
     safeSet(STORAGE_KEYS.PRODUCTS, updated);
+    localStorage.setItem('rogux_user_imported_products', 'true');
 
     // Push to Supabase asynchronously
-    SupabaseService.upsertProduct(product).catch((err) =>
+    SupabaseService.upsertProduct(productToSave).catch((err) =>
       console.warn('Supabase upsertProduct background:', err)
     );
+  },
+
+  saveProductsBatch(newProducts: Product[]): void {
+    if (!newProducts || newProducts.length === 0) return;
+    const current = this.getProducts();
+    const map = new Map<string, Product>();
+
+    // Index existing by codigo or id
+    current.forEach((p) => {
+      const key = p.codigo ? p.codigo.trim().toLowerCase() : p.id;
+      map.set(key, p);
+    });
+
+    // Merge or append new products
+    newProducts.forEach((p) => {
+      const key = p.codigo ? p.codigo.trim().toLowerCase() : p.id;
+      const existing = map.get(key);
+      const merged: Product = {
+        ...(existing || {}),
+        ...p,
+        id: existing?.id || p.id || `prod-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        activo: p.activo !== undefined ? p.activo : existing?.activo ?? true,
+      };
+      map.set(key, merged);
+    });
+
+    const combined = Array.from(map.values());
+    safeSet(STORAGE_KEYS.PRODUCTS, combined);
+    localStorage.setItem('rogux_user_imported_products', 'true');
+
+    // Push to Supabase in batch
+    SupabaseService.upsertProductsBatch(newProducts).catch((err) =>
+      console.warn('Supabase upsertProductsBatch background:', err)
+    );
+  },
+
+  toggleProductActive(id: string): void {
+    const current = this.getProducts();
+    const idx = current.findIndex((p) => p.id === id);
+    if (idx >= 0) {
+      const updated = [...current];
+      const newActive = updated[idx].activo !== undefined ? !updated[idx].activo : false;
+      updated[idx] = { ...updated[idx], activo: newActive };
+      safeSet(STORAGE_KEYS.PRODUCTS, updated);
+      SupabaseService.upsertProduct(updated[idx]).catch((err) =>
+        console.warn('Supabase toggleProductActive background:', err)
+      );
+    }
   },
 
   deleteProduct(id: string): void {
@@ -556,9 +617,39 @@ export const StorageService = {
     );
   },
 
+  deleteMultipleProducts(ids: string[]): void {
+    if (!ids || ids.length === 0) return;
+    const set = new Set(ids);
+    const current = this.getProducts();
+    const filtered = current.filter((p) => !set.has(p.id));
+    safeSet(STORAGE_KEYS.PRODUCTS, filtered);
+
+    SupabaseService.deleteMultipleProducts(ids).catch((err) =>
+      console.warn('Supabase deleteMultipleProducts background:', err)
+    );
+  },
+
+  clearAllProducts(): void {
+    const all = this.getProducts();
+    const ids = all.map((p) => p.id);
+    safeSet(STORAGE_KEYS.PRODUCTS, []);
+    if (ids.length > 0) {
+      SupabaseService.deleteMultipleProducts(ids).catch((err) =>
+        console.warn('Supabase clearAllProducts background:', err)
+      );
+    }
+  },
+
   // Clients
   getClients(): Client[] {
-    return safeGet<Client[]>(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
+    const list = safeGet<Client[]>(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
+    // If list only contains legacy sample clients (cli-001, cli-002, etc.), clear them
+    const hasOnlySampleClients = list.length > 0 && list.every((c) => c.id.startsWith('cli-00'));
+    if (hasOnlySampleClients && !localStorage.getItem('rogux_user_imported_clients')) {
+      safeSet(STORAGE_KEYS.CLIENTS, []);
+      return [];
+    }
+    return list;
   },
 
   saveClient(client: Client): void {
@@ -566,19 +657,72 @@ export const StorageService = {
     const existingIndex = current.findIndex((c) => c.id === client.id);
     let updated: Client[];
 
+    const clientToSave: Client = {
+      ...client,
+      activo: client.activo !== undefined ? client.activo : true,
+    };
+
     if (existingIndex >= 0) {
       updated = [...current];
-      updated[existingIndex] = client;
+      updated[existingIndex] = clientToSave;
     } else {
-      updated = [client, ...current];
+      updated = [clientToSave, ...current];
     }
 
     safeSet(STORAGE_KEYS.CLIENTS, updated);
+    localStorage.setItem('rogux_user_imported_clients', 'true');
 
     // Push to Supabase asynchronously
-    SupabaseService.upsertClient(client).catch((err) =>
+    SupabaseService.upsertClient(clientToSave).catch((err) =>
       console.warn('Supabase upsertClient background:', err)
     );
+  },
+
+  saveClientsBatch(newClients: Client[]): void {
+    if (!newClients || newClients.length === 0) return;
+    const current = this.getClients();
+    const map = new Map<string, Client>();
+
+    // Index existing by RFC or ID
+    current.forEach((c) => {
+      const key = c.rfc ? c.rfc.trim().toUpperCase() : c.id;
+      map.set(key, c);
+    });
+
+    newClients.forEach((c) => {
+      const key = c.rfc ? c.rfc.trim().toUpperCase() : c.id;
+      const existing = map.get(key);
+      const merged: Client = {
+        ...(existing || {}),
+        ...c,
+        id: existing?.id || c.id || `cli-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        activo: c.activo !== undefined ? c.activo : existing?.activo ?? true,
+      };
+      map.set(key, merged);
+    });
+
+    const combined = Array.from(map.values());
+    safeSet(STORAGE_KEYS.CLIENTS, combined);
+    localStorage.setItem('rogux_user_imported_clients', 'true');
+
+    // Push to Supabase in batch
+    SupabaseService.upsertClientsBatch(newClients).catch((err) =>
+      console.warn('Supabase upsertClientsBatch background:', err)
+    );
+  },
+
+  toggleClientActive(id: string): void {
+    const current = this.getClients();
+    const idx = current.findIndex((c) => c.id === id);
+    if (idx >= 0) {
+      const updated = [...current];
+      const newActive = updated[idx].activo !== undefined ? !updated[idx].activo : false;
+      updated[idx] = { ...updated[idx], activo: newActive };
+      safeSet(STORAGE_KEYS.CLIENTS, updated);
+      SupabaseService.upsertClient(updated[idx]).catch((err) =>
+        console.warn('Supabase toggleClientActive background:', err)
+      );
+    }
   },
 
   deleteClient(id: string): void {
@@ -590,6 +734,29 @@ export const StorageService = {
     SupabaseService.deleteClient(id).catch((err) =>
       console.warn('Supabase deleteClient background:', err)
     );
+  },
+
+  deleteMultipleClients(ids: string[]): void {
+    if (!ids || ids.length === 0) return;
+    const set = new Set(ids);
+    const current = this.getClients();
+    const filtered = current.filter((c) => !set.has(c.id));
+    safeSet(STORAGE_KEYS.CLIENTS, filtered);
+
+    SupabaseService.deleteMultipleClients(ids).catch((err) =>
+      console.warn('Supabase deleteMultipleClients background:', err)
+    );
+  },
+
+  clearAllClients(): void {
+    const all = this.getClients();
+    const ids = all.map((c) => c.id);
+    safeSet(STORAGE_KEYS.CLIENTS, []);
+    if (ids.length > 0) {
+      SupabaseService.deleteMultipleClients(ids).catch((err) =>
+        console.warn('Supabase clearAllClients background:', err)
+      );
+    }
   },
 
   // Two-way sync with Supabase
