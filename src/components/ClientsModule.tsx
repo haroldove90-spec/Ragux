@@ -26,6 +26,9 @@ import {
   Cloud,
   RefreshCw,
   Check,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Client } from '../types';
@@ -34,6 +37,16 @@ import {
   downloadClientLayoutTemplate,
   exportClientsToExcel,
 } from '../utils/excelExporter';
+
+export type ClientSortField =
+  | 'no'
+  | 'nombre'
+  | 'rfc'
+  | 'ciudad'
+  | 'telefono'
+  | 'activo';
+
+export type SortDirection = 'asc' | 'desc';
 
 interface ClientsModuleProps {
   clients: Client[];
@@ -58,6 +71,8 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'activos' | 'inactivos'>('todos');
+  const [sortField, setSortField] = useState<ClientSortField>('nombre');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -148,13 +163,55 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
     });
   }, [clients, searchTerm, statusFilter]);
 
+  // Handle column header sort
+  const handleSort = (field: ClientSortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort filtered clients
+  const sortedClients = useMemo(() => {
+    const list = [...filteredClients];
+    list.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'no':
+          comparison = String(a.no ?? '').localeCompare(String(b.no ?? ''), 'es', { numeric: true, sensitivity: 'base' });
+          break;
+        case 'nombre':
+          comparison = (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' });
+          break;
+        case 'rfc':
+          comparison = (a.rfc || '').localeCompare(b.rfc || '', 'es', { sensitivity: 'base' });
+          break;
+        case 'ciudad':
+          comparison = (a.ciudad || '').localeCompare(b.ciudad || '', 'es', { sensitivity: 'base' });
+          break;
+        case 'telefono':
+          comparison = (a.telefono || '').localeCompare(b.telefono || '', 'es', { numeric: true, sensitivity: 'base' });
+          break;
+        case 'activo':
+          comparison = (a.activo === false ? 0 : 1) - (b.activo === false ? 0 : 1);
+          break;
+        default:
+          comparison = 0;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+    return list;
+  }, [filteredClients, sortField, sortDirection]);
+
   // Pagination (10 en 10)
-  const totalPages = Math.max(1, Math.ceil(filteredClients.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(sortedClients.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedClients = useMemo(() => {
     const start = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-    return filteredClients.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredClients, safeCurrentPage]);
+    return sortedClients.slice(start, start + ITEMS_PER_PAGE);
+  }, [sortedClients, safeCurrentPage]);
 
   // Multi-selection helpers
   const allCurrentPageSelected =
@@ -163,19 +220,19 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
 
   const toggleSelectAllPage = () => {
     if (allCurrentPageSelected) {
-      const pageIds = new Set(paginatedClients.map((c) => c.id));
+      const pageIds = new Set(paginatedClients.map((p) => p.id));
       setSelectedIds((prev) => prev.filter((id) => !pageIds.has(id)));
     } else {
-      const newIds = Array.from(new Set([...selectedIds, ...paginatedClients.map((c) => c.id)]));
+      const newIds = Array.from(new Set([...selectedIds, ...paginatedClients.map((p) => p.id)]));
       setSelectedIds(newIds);
     }
   };
 
   const toggleSelectAllFiltered = () => {
-    if (selectedIds.length === filteredClients.length) {
+    if (selectedIds.length === sortedClients.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredClients.map((c) => c.id));
+      setSelectedIds(sortedClients.map((c) => c.id));
     }
   };
 
@@ -530,7 +587,7 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
 
           {/* Export File Button */}
           <button
-            onClick={() => exportClientsToExcel(filteredClients)}
+            onClick={() => exportClientsToExcel(sortedClients)}
             type="button"
             className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
             title="Exportar registros filtrados a Excel"
@@ -617,7 +674,49 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+            {/* Quick Sort Selector & Direction Toggle */}
+            <div className="flex items-center gap-1.5 bg-white border border-gray-300 rounded-xl px-2.5 py-1 text-xs shadow-2xs">
+              <span className="text-gray-500 font-medium hidden sm:inline">Orden:</span>
+              <select
+                value={sortField}
+                onChange={(e) => {
+                  setSortField(e.target.value as ClientSortField);
+                  setCurrentPage(1);
+                }}
+                className="bg-transparent font-semibold text-gray-800 focus:outline-none cursor-pointer"
+              >
+                <option value="nombre">Nombre / Razón Social</option>
+                <option value="no">Número de Cliente (No.)</option>
+                <option value="rfc">RFC</option>
+                <option value="ciudad">Ciudad / Estado</option>
+                <option value="telefono">Teléfono</option>
+                <option value="activo">Estado</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-[11px] cursor-pointer transition"
+                title={
+                  sortDirection === 'asc'
+                    ? 'Orden Ascendente (clic para Descendente)'
+                    : 'Orden Descendente (clic para Ascendente)'
+                }
+              >
+                {sortDirection === 'asc' ? (
+                  <>
+                    <ArrowUp className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Asc</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDown className="w-3.5 h-3.5 text-blue-700" />
+                    <span>Desc</span>
+                  </>
+                )}
+              </button>
+            </div>
+
             {/* Status Segmented Buttons */}
             <div className="flex items-center bg-gray-200/80 p-0.5 rounded-xl text-xs font-semibold">
               <button
@@ -679,9 +778,9 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
                 type="button"
                 className="text-xs text-emerald-700 underline font-semibold ml-2 hover:text-emerald-900"
               >
-                {selectedIds.length === filteredClients.length
+                {selectedIds.length === sortedClients.length
                   ? 'Deseleccionar todos'
-                  : `Seleccionar los ${filteredClients.length} filtrados`}
+                  : `Seleccionar los ${sortedClients.length} filtrados`}
               </button>
             </div>
 
@@ -714,7 +813,7 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
                   <button
                     onClick={toggleSelectAllPage}
                     type="button"
-                    className="cursor-pointer text-gray-700 hover:text-black flex items-center justify-center"
+                    className="cursor-pointer text-gray-700 hover:text-black flex items-center justify-center mx-auto"
                     title={allCurrentPageSelected ? 'Deseleccionar página' : 'Seleccionar página completa'}
                   >
                     {allCurrentPageSelected ? (
@@ -724,18 +823,120 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
                     )}
                   </button>
                 </th>
-                <th className="py-3 px-2 w-14 text-center">No.</th>
-                <th className="py-3 px-3 min-w-[200px]">Nombre / Razón Social</th>
-                <th className="py-3 px-3 w-32">RFC</th>
+                <th
+                  onClick={() => handleSort('no')}
+                  className="py-3 px-2 w-16 text-center cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por No. (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>No.</span>
+                    {sortField === 'no' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('nombre')}
+                  className="py-3 px-3 min-w-[200px] cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Nombre / Razón Social (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Nombre / Razón Social</span>
+                    {sortField === 'nombre' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('rfc')}
+                  className="py-3 px-3 w-32 cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por RFC (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>RFC</span>
+                    {sortField === 'rfc' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
                 <th className="py-3 px-3 min-w-[220px]">Dirección (Calle, #, Col, C.P.)</th>
-                <th className="py-3 px-3 w-36">Ciudad / Estado</th>
-                <th className="py-3 px-3 w-32">Teléfono</th>
-                <th className="py-3 px-3 w-24 text-center">Estado</th>
+                <th
+                  onClick={() => handleSort('ciudad')}
+                  className="py-3 px-3 w-36 cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Ciudad / Estado (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Ciudad / Estado</span>
+                    {sortField === 'ciudad' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('telefono')}
+                  className="py-3 px-3 w-32 cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Teléfono (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Teléfono</span>
+                    {sortField === 'telefono' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('activo')}
+                  className="py-3 px-3 w-24 text-center cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Estado (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Estado</span>
+                    {sortField === 'activo' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
                 <th className="py-3 px-3 w-36 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {filteredClients.length === 0 ? (
+              {sortedClients.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-16 text-center text-gray-400">
                     <div className="max-w-md mx-auto space-y-3">
@@ -926,14 +1127,14 @@ export const ClientsModule: React.FC<ClientsModuleProps> = ({
         </div>
 
         {/* Pagination Controls (10 en 10) */}
-        {filteredClients.length > 0 && (
+        {sortedClients.length > 0 && (
           <div className="p-4 sm:px-6 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/70 text-xs">
             <div className="text-gray-600 font-medium">
               Mostrando <span className="font-bold text-gray-900">{(safeCurrentPage - 1) * ITEMS_PER_PAGE + 1}</span> a{' '}
               <span className="font-bold text-gray-900">
-                {Math.min(safeCurrentPage * ITEMS_PER_PAGE, filteredClients.length)}
+                {Math.min(safeCurrentPage * ITEMS_PER_PAGE, sortedClients.length)}
               </span>{' '}
-              de <span className="font-bold text-gray-900">{filteredClients.length}</span> clientes
+              de <span className="font-bold text-gray-900">{sortedClients.length}</span> clientes
             </div>
 
             <div className="flex items-center gap-1.5">

@@ -55,14 +55,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       desc: 'Historial y pagarés carta',
       icon: FileText,
     },
-    ...(activeRole === 'admin'
+    ...((activeRole === 'admin' || activeRole === 'logistica')
       ? [
           {
             id: 'productos' as NavTab,
             label: 'Productos',
-            desc: 'Catálogo e inventario',
+            desc: activeRole === 'logistica' ? 'Catálogo (solo consulta)' : 'Catálogo e inventario',
             icon: Package,
           },
+        ]
+      : []),
+    ...(activeRole === 'admin'
+      ? [
           {
             id: 'clientes' as NavTab,
             label: 'Clientes',

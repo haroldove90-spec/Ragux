@@ -40,7 +40,7 @@ export const APP_ROLES: RoleInfo[] = [
   {
     id: 'logistica',
     name: 'Logística',
-    description: 'Acceso a cotizaciones, notas de venta y modificación de cotizaciones guardadas.',
+    description: 'Acceso a cotizaciones, notas de venta, modificación de cotizaciones y consulta del catálogo de productos.',
     badgeColor: '#3B82F6',
   },
   {

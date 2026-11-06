@@ -26,6 +26,10 @@ import {
   Cloud,
   Check,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  Lock,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product } from '../types';
@@ -35,10 +39,22 @@ import {
   exportProductsToExcel,
 } from '../utils/excelExporter';
 
+export type ProductSortField =
+  | 'codigo'
+  | 'descripcion'
+  | 'unidadMedida'
+  | 'categoria'
+  | 'precioUnitario'
+  | 'stock'
+  | 'activo';
+
+export type SortDirection = 'asc' | 'desc';
+
 interface ProductsModuleProps {
   products: Product[];
   onRefresh: () => void;
   onSyncCloud?: () => Promise<any>;
+  readOnly?: boolean;
 }
 
 interface DuplicateProductItem {
@@ -53,10 +69,13 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
   products,
   onRefresh,
   onSyncCloud,
+  readOnly = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('todas');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'activos' | 'inactivos'>('todos');
+  const [sortField, setSortField] = useState<ProductSortField>('codigo');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -144,13 +163,58 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
     });
   }, [products, searchTerm, statusFilter, categoryFilter]);
 
+  // Handle column header sort
+  const handleSort = (field: ProductSortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort filtered products
+  const sortedProducts = useMemo(() => {
+    const list = [...filteredProducts];
+    list.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'codigo':
+          comparison = (a.codigo || '').localeCompare(b.codigo || '', 'es', { numeric: true, sensitivity: 'base' });
+          break;
+        case 'descripcion':
+          comparison = (a.descripcion || '').localeCompare(b.descripcion || '', 'es', { numeric: true, sensitivity: 'base' });
+          break;
+        case 'unidadMedida':
+          comparison = (a.unidadMedida || '').localeCompare(b.unidadMedida || '', 'es', { sensitivity: 'base' });
+          break;
+        case 'categoria':
+          comparison = (a.categoria || '').localeCompare(b.categoria || '', 'es', { sensitivity: 'base' });
+          break;
+        case 'precioUnitario':
+          comparison = (a.precioUnitario ?? 0) - (b.precioUnitario ?? 0);
+          break;
+        case 'stock':
+          comparison = (a.stock ?? 0) - (b.stock ?? 0);
+          break;
+        case 'activo':
+          comparison = (a.activo === false ? 0 : 1) - (b.activo === false ? 0 : 1);
+          break;
+        default:
+          comparison = 0;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+    return list;
+  }, [filteredProducts, sortField, sortDirection]);
+
   // Pagination (10 en 10)
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ITEMS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedProducts = useMemo(() => {
     const start = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-    return filteredProducts.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredProducts, safeCurrentPage]);
+    return sortedProducts.slice(start, start + ITEMS_PER_PAGE);
+  }, [sortedProducts, safeCurrentPage]);
 
   // Multi-selection helpers
   const allCurrentPageSelected =
@@ -168,10 +232,10 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
   };
 
   const toggleSelectAllFiltered = () => {
-    if (selectedIds.length === filteredProducts.length) {
+    if (selectedIds.length === sortedProducts.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredProducts.map((p) => p.id));
+      setSelectedIds(sortedProducts.map((p) => p.id));
     }
   };
 
@@ -480,48 +544,57 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-          {/* Download Template */}
-          <button
-            onClick={downloadProductLayoutTemplate}
-            type="button"
-            className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer border border-gray-200"
-            title="Descargar plantilla de Excel vacía con el formato de catálogo"
-          >
-            <Download className="w-4 h-4 text-gray-600" />
-            <span>Descargar Plantilla</span>
-          </button>
+          {readOnly ? (
+            <div className="flex items-center gap-2 px-3.5 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs font-bold shadow-xs">
+              <Lock className="w-4 h-4 text-blue-600" />
+              <span>Rol Logística: Catálogo en Modo Consulta</span>
+            </div>
+          ) : (
+            <>
+              {/* Download Template */}
+              <button
+                onClick={downloadProductLayoutTemplate}
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer border border-gray-200"
+                title="Descargar plantilla de Excel vacía con el formato de catálogo"
+              >
+                <Download className="w-4 h-4 text-gray-600" />
+                <span>Descargar Plantilla</span>
+              </button>
 
-          {/* Import File Button */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            type="button"
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
-            title="Importar catálogo completo desde Excel (.xlsx) o CSV con detección de duplicados"
-          >
-            <Upload className="w-4 h-4" />
-            <span>Importar Excel / CSV</span>
-          </button>
+              {/* Import File Button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                type="button"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+                title="Importar catálogo completo desde Excel (.xlsx) o CSV con detección de duplicados"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Importar Excel / CSV</span>
+              </button>
 
-          {/* Export File Button */}
-          <button
-            onClick={() => exportProductsToExcel(filteredProducts)}
-            type="button"
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
-            title="Exportar catálogo filtrado a Excel (.xlsx)"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-            <span>Exportar Excel</span>
-          </button>
+              {/* Export File Button */}
+              <button
+                onClick={() => exportProductsToExcel(sortedProducts)}
+                type="button"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs"
+                title="Exportar catálogo filtrado a Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <span>Exportar Excel</span>
+              </button>
 
-          {/* New Product */}
-          <button
-            onClick={handleOpenAdd}
-            type="button"
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nuevo Producto</span>
-          </button>
+              {/* New Product */}
+              <button
+                onClick={handleOpenAdd}
+                type="button"
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#66C34E] hover:bg-[#52a33c] text-white rounded-xl text-xs font-black transition active:scale-95 cursor-pointer shadow-xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nuevo Producto</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -592,6 +665,49 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+            {/* Quick Sort Selector & Direction Toggle */}
+            <div className="flex items-center gap-1.5 bg-white border border-gray-300 rounded-xl px-2.5 py-1 text-xs shadow-2xs">
+              <span className="text-gray-500 font-medium hidden sm:inline">Orden:</span>
+              <select
+                value={sortField}
+                onChange={(e) => {
+                  setSortField(e.target.value as ProductSortField);
+                  setCurrentPage(1);
+                }}
+                className="bg-transparent font-semibold text-gray-800 focus:outline-none cursor-pointer"
+              >
+                <option value="codigo">Código / Clave</option>
+                <option value="descripcion">Descripción</option>
+                <option value="precioUnitario">Precio Unitario</option>
+                <option value="stock">Stock Disponible</option>
+                <option value="categoria">Categoría</option>
+                <option value="unidadMedida">Unidad</option>
+                <option value="activo">Estado</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-[11px] cursor-pointer transition"
+                title={
+                  sortDirection === 'asc'
+                    ? 'Orden Ascendente (clic para Descendente)'
+                    : 'Orden Descendente (clic para Ascendente)'
+                }
+              >
+                {sortDirection === 'asc' ? (
+                  <>
+                    <ArrowUp className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Asc</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDown className="w-3.5 h-3.5 text-blue-700" />
+                    <span>Desc</span>
+                  </>
+                )}
+              </button>
+            </div>
+
             {/* Category Filter */}
             {categories.length > 0 && (
               <div className="flex items-center gap-1.5">
@@ -662,8 +778,8 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
           </div>
         </div>
 
-        {/* Bulk Action Banner when 1+ selected */}
-        {selectedIds.length > 0 && (
+        {/* Bulk Action Banner when 1+ selected (Admin only) */}
+        {!readOnly && selectedIds.length > 0 && (
           <div className="px-5 py-3 bg-emerald-50 border-b border-emerald-200 flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
             <div className="flex items-center gap-2">
               <CheckSquare className="w-4 h-4 text-[#66C34E]" />
@@ -675,9 +791,9 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
                 type="button"
                 className="text-xs text-emerald-700 underline font-semibold ml-2 hover:text-emerald-900"
               >
-                {selectedIds.length === filteredProducts.length
+                {selectedIds.length === sortedProducts.length
                   ? 'Deseleccionar todos'
-                  : `Seleccionar los ${filteredProducts.length} filtrados`}
+                  : `Seleccionar los ${sortedProducts.length} filtrados`}
               </button>
             </div>
 
@@ -707,31 +823,154 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
             <thead>
               <tr className="bg-[#C3CAD0] text-gray-900 font-bold uppercase text-[11px] border-b border-gray-300 select-none">
                 <th className="py-3 px-3 text-center w-10">
-                  <button
-                    onClick={toggleSelectAllPage}
-                    type="button"
-                    className="cursor-pointer text-gray-700 hover:text-black flex items-center justify-center"
-                    title={allCurrentPageSelected ? 'Deseleccionar página' : 'Seleccionar página completa'}
-                  >
-                    {allCurrentPageSelected ? (
-                      <CheckSquare className="w-4 h-4 text-[#66C34E]" />
-                    ) : (
-                      <Square className="w-4 h-4 text-gray-600" />
-                    )}
-                  </button>
+                  {readOnly ? (
+                    <span className="text-gray-700 font-bold">#</span>
+                  ) : (
+                    <button
+                      onClick={toggleSelectAllPage}
+                      type="button"
+                      className="cursor-pointer text-gray-700 hover:text-black flex items-center justify-center mx-auto"
+                      title={allCurrentPageSelected ? 'Deseleccionar página' : 'Seleccionar página completa'}
+                    >
+                      {allCurrentPageSelected ? (
+                        <CheckSquare className="w-4 h-4 text-[#66C34E]" />
+                      ) : (
+                        <Square className="w-4 h-4 text-gray-600" />
+                      )}
+                    </button>
+                  )}
                 </th>
-                <th className="py-3 px-3 w-28 font-mono">Código / Clave</th>
-                <th className="py-3 px-4 min-w-[280px]">Descripción del Producto</th>
-                <th className="py-3 px-3 text-center w-28">Unidad de Medida</th>
-                <th className="py-3 px-3 w-36">Categoría</th>
-                <th className="py-3 px-3 text-right w-32">Precio Unitario ($)</th>
-                <th className="py-3 px-3 text-center w-24">Stock Disp.</th>
-                <th className="py-3 px-3 w-24 text-center">Estado</th>
-                <th className="py-3 px-3 w-32 text-center">Acciones</th>
+                <th
+                  onClick={() => handleSort('codigo')}
+                  className="py-3 px-3 w-28 font-mono cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Código (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Código / Clave</span>
+                    {sortField === 'codigo' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('descripcion')}
+                  className="py-3 px-4 min-w-[280px] cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Descripción (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Descripción del Producto</span>
+                    {sortField === 'descripcion' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('unidadMedida')}
+                  className="py-3 px-3 text-center w-28 cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Unidad de Medida (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Unidad</span>
+                    {sortField === 'unidadMedida' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('categoria')}
+                  className="py-3 px-3 w-36 cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Categoría (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Categoría</span>
+                    {sortField === 'categoria' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('precioUnitario')}
+                  className="py-3 px-3 text-right w-32 cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Precio (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    <span>Precio ($)</span>
+                    {sortField === 'precioUnitario' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('stock')}
+                  className="py-3 px-3 text-center w-24 cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Stock (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Stock</span>
+                    {sortField === 'stock' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('activo')}
+                  className="py-3 px-3 w-24 text-center cursor-pointer hover:bg-[#b0b8bf] transition select-none"
+                  title="Ordenar por Estado (clic para alternar Asc/Desc)"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Estado</span>
+                    {sortField === 'activo' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-gray-900" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-gray-900" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-gray-500 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th className="py-3 px-3 w-28 text-center">{readOnly ? 'Detalle' : 'Acciones'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {filteredProducts.length === 0 ? (
+              {sortedProducts.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-16 text-center text-gray-400">
                     <div className="max-w-md mx-auto space-y-3">
@@ -746,9 +985,9 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
                       <p className="text-xs text-gray-500">
                         {searchTerm
                           ? 'Intenta con otro término o limpia el buscador inteligente.'
-                          : 'Sincroniza con Supabase o importa tu archivo Excel con la estructura de productos ROGUX.'}
+                          : 'Sincroniza con Supabase o contacta al administrador para cargar productos.'}
                       </p>
-                      {!searchTerm && (
+                      {!searchTerm && !readOnly && (
                         <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
                           <button
                             onClick={handleCloudSync}
@@ -780,7 +1019,7 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
                   </td>
                 </tr>
               ) : (
-                paginatedProducts.map((p) => {
+                paginatedProducts.map((p, idx) => {
                   const isSelected = selectedIds.includes(p.id);
                   const isInactive = p.activo === false;
 
@@ -791,19 +1030,25 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
                         isSelected ? 'bg-emerald-50/50' : ''
                       } ${isInactive ? 'opacity-65 bg-gray-50/40' : ''}`}
                     >
-                      {/* Checkbox */}
+                      {/* Checkbox or Row Index */}
                       <td className="py-3 px-3 text-center">
-                        <button
-                          onClick={() => toggleSelectOne(p.id)}
-                          type="button"
-                          className="cursor-pointer text-gray-500 hover:text-black flex items-center justify-center"
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-[#66C34E]" />
-                          ) : (
-                            <Square className="w-4 h-4 text-gray-400" />
-                          )}
-                        </button>
+                        {readOnly ? (
+                          <span className="text-gray-400 font-mono text-[11px]">
+                            {(safeCurrentPage - 1) * ITEMS_PER_PAGE + idx + 1}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => toggleSelectOne(p.id)}
+                            type="button"
+                            className="cursor-pointer text-gray-500 hover:text-black flex items-center justify-center mx-auto"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-[#66C34E]" />
+                            ) : (
+                              <Square className="w-4 h-4 text-gray-400" />
+                            )}
+                          </button>
+                        )}
                       </td>
 
                       {/* Código */}
@@ -854,22 +1099,32 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
 
                       {/* Estado */}
                       <td className="py-3 px-3 text-center">
-                        <button
-                          onClick={() => handleToggleActive(p)}
-                          type="button"
-                          className="group inline-flex items-center gap-1 cursor-pointer"
-                          title={isInactive ? 'Hacer clic para activar producto' : 'Hacer clic para desactivar producto'}
-                        >
-                          {isInactive ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 group-hover:bg-amber-200">
-                              <ToggleLeft className="w-3 h-3 text-amber-600" /> Inactivo
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 group-hover:bg-emerald-200">
-                              <ToggleRight className="w-3 h-3 text-emerald-600" /> Activo
-                            </span>
-                          )}
-                        </button>
+                        {readOnly ? (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isInactive ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            {isInactive ? 'Inactivo' : 'Activo'}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleToggleActive(p)}
+                            type="button"
+                            className="group inline-flex items-center gap-1 cursor-pointer"
+                            title={isInactive ? 'Hacer clic para activar producto' : 'Hacer clic para desactivar producto'}
+                          >
+                            {isInactive ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 group-hover:bg-amber-200">
+                                <ToggleLeft className="w-3 h-3 text-amber-600" /> Inactivo
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 group-hover:bg-emerald-200">
+                                <ToggleRight className="w-3 h-3 text-emerald-600" /> Activo
+                              </span>
+                            )}
+                          </button>
+                        )}
                       </td>
 
                       {/* Acciones */}
@@ -882,28 +1137,32 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
                             className="p-1.5 rounded-lg text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
                             title="Ver detalle del producto"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="w-4 h-4" />
                           </button>
 
-                          {/* Edit */}
-                          <button
-                            onClick={() => handleOpenEdit(p)}
-                            type="button"
-                            className="p-1.5 rounded-lg text-gray-500 hover:text-blue-700 hover:bg-blue-50 transition cursor-pointer"
-                            title="Editar producto"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
+                          {!readOnly && (
+                            <>
+                              {/* Edit */}
+                              <button
+                                onClick={() => handleOpenEdit(p)}
+                                type="button"
+                                className="p-1.5 rounded-lg text-gray-500 hover:text-blue-700 hover:bg-blue-50 transition cursor-pointer"
+                                title="Editar producto"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
 
-                          {/* Delete */}
-                          <button
-                            onClick={() => handleDeleteOne(p)}
-                            type="button"
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
-                            title="Eliminar producto"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                              {/* Delete */}
+                              <button
+                                onClick={() => handleDeleteOne(p)}
+                                type="button"
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                                title="Eliminar producto"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -915,14 +1174,14 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
         </div>
 
         {/* Pagination Controls (10 en 10) */}
-        {filteredProducts.length > 0 && (
+        {sortedProducts.length > 0 && (
           <div className="p-4 sm:px-6 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/70 text-xs">
             <div className="text-gray-600 font-medium">
               Mostrando <span className="font-bold text-gray-900">{(safeCurrentPage - 1) * ITEMS_PER_PAGE + 1}</span> a{' '}
               <span className="font-bold text-gray-900">
-                {Math.min(safeCurrentPage * ITEMS_PER_PAGE, filteredProducts.length)}
+                {Math.min(safeCurrentPage * ITEMS_PER_PAGE, sortedProducts.length)}
               </span>{' '}
-              de <span className="font-bold text-gray-900">{filteredProducts.length}</span> productos
+              de <span className="font-bold text-gray-900">{sortedProducts.length}</span> productos
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -1191,21 +1450,23 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
             </div>
 
             <div className="mt-5 pt-3 border-t border-gray-200 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const p = viewingProduct;
-                  setViewingProduct(null);
-                  handleOpenEdit(p);
-                }}
-                className="px-3.5 py-1.5 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100"
-              >
-                Editar
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const p = viewingProduct;
+                    setViewingProduct(null);
+                    handleOpenEdit(p);
+                  }}
+                  className="px-3.5 py-1.5 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 cursor-pointer"
+                >
+                  Editar
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setViewingProduct(null)}
-                className="px-4 py-1.5 bg-gray-800 text-white rounded-xl text-xs font-bold hover:bg-gray-900"
+                className="px-4 py-1.5 bg-[#66C34E] text-white rounded-xl text-xs font-bold hover:bg-[#52a33c] transition cursor-pointer"
               >
                 Cerrar
               </button>

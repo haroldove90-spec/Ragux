@@ -52,13 +52,17 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             icon: FilePlus,
           },
         ]),
-    ...(isAdmin
+    ...(isAdmin || isLogistica
       ? [
           {
             id: 'productos' as NavTab,
             label: 'Catálogo',
             icon: Package,
           },
+        ]
+      : []),
+    ...(isAdmin
+      ? [
           {
             id: 'clientes' as NavTab,
             label: 'Clientes',

@@ -85,9 +85,9 @@ export default function App() {
       const currentTab = StorageService.getActiveTab();
       if (activeRole === 'vendedor' && currentTab !== 'nueva_nota_venta' && currentTab !== 'notas_venta' && currentTab !== 'perfil') {
         setActiveTab('nueva_nota_venta');
-      } else if (activeRole === 'logistica' && (currentTab === 'productos' || currentTab === 'clientes' || currentTab === 'empleados')) {
+      } else if (activeRole === 'logistica' && (currentTab === 'clientes' || currentTab === 'empleados')) {
         setActiveTab('cotizaciones');
-      } else if (activeRole !== 'admin' && (currentTab === 'productos' || currentTab === 'clientes' || currentTab === 'empleados')) {
+      } else if (activeRole !== 'admin' && activeRole !== 'logistica' && (currentTab === 'productos' || currentTab === 'clientes' || currentTab === 'empleados')) {
         setActiveTab('nueva_nota_venta');
       } else {
         setActiveTabState(currentTab);
@@ -104,7 +104,7 @@ export default function App() {
         setActiveTab('nueva_nota_venta');
       }
     } else if (activeRole === 'logistica') {
-      if (activeTab === 'productos' || activeTab === 'clientes' || activeTab === 'empleados') {
+      if (activeTab === 'clientes' || activeTab === 'empleados') {
         setActiveTab('cotizaciones');
       }
     } else if (activeRole !== 'admin') {
@@ -333,11 +333,12 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'productos' && activeRole === 'admin' && (
+              {activeTab === 'productos' && (activeRole === 'admin' || activeRole === 'logistica') && (
                 <ProductsModule
                   products={products}
                   onRefresh={refreshAllData}
                   onSyncCloud={handleManualSync}
+                  readOnly={activeRole === 'logistica'}
                 />
               )}
 
